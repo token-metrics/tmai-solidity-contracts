@@ -1,0 +1,42 @@
+require("dotenv").config();
+require("@nomiclabs/hardhat-etherscan");
+
+// Testnet
+const { TEST_PRIVATE_KEY} = process.env;
+// Mainnet
+const { DEPLOYER_PRIVATE_KEY, ARBISCAN_API_KEY, ARBITRUM_RPC_URL } = process.env;
+
+module.exports = {
+  defaultNetwork: "hardhat",
+  networks: {
+    hardhat: {
+    },
+    arbitrumOne: {
+      url: ARBITRUM_RPC_URL,
+      accounts: [DEPLOYER_PRIVATE_KEY],
+    },
+  },
+  etherscan: {
+    apiKey: {
+      arbitrumOne: ARBISCAN_API_KEY,
+    }
+  },
+  solidity: {
+    compilers: [
+      {
+        version: "0.8.20",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200,
+          },
+        },
+      },
+    ],
+  },
+  paths: {
+    sources: "./src",
+    tests: "./test/hardhat",
+    scripts: "./script/hardhat",
+  },
+};

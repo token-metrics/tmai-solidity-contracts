@@ -1,0 +1,18 @@
+{
+  "name": "tmai-smartcontracts",
+  "version": "1.0.0",
+  "description": "TMAI Smart Contracts",
+  "dependencies": {
+    "@arbitrum/nitro-contracts": "^1.2.1",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@nomiclabs/hardhat-waffle": "^2.0.6",
+    "@openzeppelin/contracts": "^4.9.0",
+    "@openzeppelin/contracts-upgradeable": "^4.9.0",
+    "hardhat": "^2.22.3"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.11",
+    "chai": "^4.3.7",
+    "dotenv": "^16.4.5"
+  }
+}
