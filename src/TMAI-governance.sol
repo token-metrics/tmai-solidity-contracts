@@ -7,8 +7,15 @@ import "./interface/IChefV2.sol";
 import "./interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract GovernorAlpha is Initializable {
+
+    using SafeMathUpgradeable for uint;
+    using SafeERC20 for IERC20;
+
     /// @notice The name of this contract
     string public constant name = "Token Metrics Governor Alpha";
     
@@ -29,6 +36,10 @@ contract GovernorAlpha is Initializable {
     uint256 public lastProposal;
 
     ChefInterface.Level public requiredUserLevel;
+
+    address public admin;
+
+    address public baseStableCoin;
 
 
     /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
@@ -54,7 +65,13 @@ contract GovernorAlpha is Initializable {
 
     /// @notice The total number of targets.
     uint256 public totalTarget;
-    
+
+    /// @notice Percent fort revenue share
+    uint256 public revenueSharePercent;
+
+    /// @notice Percent to buyback and burn
+    uint256 public buybackAndBurnPercent;
+
     // @notice voter info 
     struct VoterInfo {
         /// @notice Map voter address for proposal
@@ -180,7 +197,11 @@ contract GovernorAlpha is Initializable {
     /// @notice An event emitted when a proposal has been executed in the Timelock
     event ProposalExecuted(uint id);
 
-    function initialize(address timelock_, address TMAI_,address _chef) external initializer {
+    /// @notice An event emitted when a revenue is distributed for Revenue Share and Buyback and Burn
+    event RevenueDistributed(uint revenue, address buybackAndBurnReceiver, uint buybackAndBurn, address revenueShareReceiver, uint revenueShareAmount);
+
+
+    function initialize(address timelock_, address TMAI_, address _chef, address _baseStableCoin) external initializer {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
         require(_chef != address(0), "Zero Address");
@@ -193,6 +214,10 @@ contract GovernorAlpha is Initializable {
         requiredUserLevel = ChefInterface.Level.Level4;
         totalTarget = 3;
         votingPeriod = 2016000;
+        revenueSharePercent = 50;
+        buybackAndBurnPercent = 50;
+        admin = msg.sender;
+        baseStableCoin = _baseStableCoin;
     }
     /**
      * @notice Update Quorum Value
@@ -202,6 +227,16 @@ contract GovernorAlpha is Initializable {
     function updateQuorumValue(uint256 _quorumValue) external {
         require(msg.sender == address(timelock), "Call must come from Timelock.");
         quorumVote = _quorumValue; 
+    }
+
+    /**
+     * @notice Update Admin
+     * @param _admin New Admin address.
+	 * @dev Update admin
+     */
+    function updateAdmin(address _admin) external {
+        require(msg.sender == admin, "Call must come from Admin.");
+        admin = _admin; 
     }
 
     /**
@@ -245,6 +280,33 @@ contract GovernorAlpha is Initializable {
         require(msg.sender == address(timelock), "Call must come from Timelock.");
         requiredUserLevel = _newrequiredUserLevel; 
     }
+
+     /**
+     * @notice update Revenue Share Percent.
+     * @param _newRevenueSharePercent New Revenue Share Percent.
+	 * @dev Update percentage for revenue share.
+     */
+
+    function updateRevenueSharePercent(uint _newRevenueSharePercent) external {
+        require(msg.sender == address(timelock), "Call must come from Timelock.");
+        require(_newRevenueSharePercent <= 100, "Revenue Share Percent should be less than 100");
+        revenueSharePercent = _newRevenueSharePercent; 
+        buybackAndBurnPercent = 100 - _newRevenueSharePercent;
+    }
+
+     /**
+     * @notice update Buyback And Burn Percent
+     * @param _newBuybackAndBurnPercent New Buyback And Burn Percent.
+	 * @dev Update percentage for Buyback And Burn.
+     */
+
+    function updateBuybackAndBurnPercent(uint _newBuybackAndBurnPercent) external {
+        require(msg.sender == address(timelock), "Call must come from Timelock.");
+        require(_newBuybackAndBurnPercent <= 100, "Revenue Share Percent should be less than 100");
+        buybackAndBurnPercent = _newBuybackAndBurnPercent; 
+        revenueSharePercent = 100 - _newBuybackAndBurnPercent;
+    }
+
     /**
      * @notice Update number of target.
      * @param _totalTarget New maxium target.
@@ -597,6 +659,23 @@ contract GovernorAlpha is Initializable {
         (_stakingScore, _currentMultiplier, _maxMultiplier) = ChefInterface(chefAddress).stakingScoreAndMultiplier(_userAddress,_amount);
         return div256(mul256(_stakingScore,_currentMultiplier), MULTIPLIER_DECIMAL);
     }
+
+    /**
+    * @dev Function to claim buyback and burn funds
+    * @param receiverBuyBackandBurn address to receive funds for buyback and burn
+    * @param receiverRevenueShare address to receive funds for revenueShare
+    */
+    function distributeRevenue(address receiverBuyBackandBurn, address receiverRevenueShare) external {
+        require(msg.sender == admin, "Call must come from Admin.");
+        uint revenue = IERC20(baseStableCoin).balanceOf(address(this));
+        require(revenue > 0, "No Revenue to distribute");
+        uint buyBackandBurnAmount = revenue.mul(buybackAndBurnPercent).div(100);
+        uint revenueShareAmount = revenue.sub(buyBackandBurnAmount);
+        IERC20(baseStableCoin).safeTransfer(receiverBuyBackandBurn, buyBackandBurnAmount);
+        IERC20(baseStableCoin).safeTransfer(receiverRevenueShare, revenueShareAmount);
+        emit RevenueDistributed(revenue, receiverBuyBackandBurn, buyBackandBurnAmount, receiverRevenueShare, revenueShareAmount);
+    }
+
 
    /**
     * @dev Functions used for internal safemath purpose.
