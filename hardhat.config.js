@@ -1,5 +1,8 @@
 require("dotenv").config();
+require("@nomicfoundation/hardhat-chai-matchers");
 require("@nomiclabs/hardhat-etherscan");
+require("@nomicfoundation/hardhat-ethers");
+require("@openzeppelin/hardhat-upgrades");
 
 // Testnet
 const { TEST_PRIVATE_KEY} = process.env;

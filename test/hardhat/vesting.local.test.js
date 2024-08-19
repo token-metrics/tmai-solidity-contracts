@@ -21,16 +21,16 @@ describe("Vesting", function () {
 
         it("Should deploy Vesting contract", async function () {
             const Vesting = await ethers.getContractFactory("TMAIVesting");
-            vesting = await upgrades.deployProxy(Vesting, [token.address, "120"]);
+            vesting = await upgrades.deployProxy(Vesting, [await token.getAddress(), "120"]);
 
-            await token.transfer(vesting.address, 10000000000);
+            await token.transfer(await vesting.getAddress(), 10000000000);
         });
     });
 
     describe("Check Initial Configuration", function () {
 
         it("Should check token address", async function () {
-            expect(await vesting.getToken()).to.equal(token.address);
+            expect(await vesting.getToken()).to.equal(await token.getAddress());
         });
 
         it("Should check correct owner", async function () {
@@ -51,10 +51,10 @@ describe("Vesting", function () {
 
     describe("Check airdrop", function () {
         it("Should airdrop tokens", async function () {
-            await token.approve(vesting.address, 60000);
+            await token.approve(await vesting.getAddress(), 60000);
             await vesting.multisendToken([signers[1].address, signers[2].address], [10000, 20000]);
-            expect(await token.balanceOf(signers[1].address)).to.equal(10000);
-            expect(await token.balanceOf(signers[2].address)).to.equal(20000);
+            expect(await token.balanceOf(signers[1].address)).to.equal(10000n);
+            expect(await token.balanceOf(signers[2].address)).to.equal(20000n);
         });
     });
 
@@ -76,7 +76,7 @@ describe("Vesting", function () {
 
             const balanceAfter = await token.balanceOf(signers[3].address);
 
-            expect(balanceAfter).to.equal(balanceBefore + 10);
+            expect(balanceAfter).to.equal(balanceBefore + 10n);
         });
 
         it("Should create multiple vesting schedules", async function () {
@@ -91,7 +91,7 @@ describe("Vesting", function () {
 
         beforeEach(async function () {
             tmpTime = await time.latest();
-            await vesting.addUserDetails([signers[1].address, signers[2].address, signers[3].address], [10000, 10000, 10000], [0, 0, 0], 1000, 10, true);
+            await vesting.addUserDetails([signers[1].address, signers[2].address, signers[3].address], [10000, 10000, 10000], [0, 0, 0], tmpTime, 400, 1000, 1, true);
         });
 
         it("Should show correct claimable amount in get function", async function () {
@@ -99,8 +99,8 @@ describe("Vesting", function () {
             let vestingId = await vesting.getVestingIdAtIndex(4);
             expect(await vesting.computeReleasableAmount(vestingId)).to.be.equal(0);
 
-            await time.increase(tmpTime + 410);
-            expect(await vesting.computeReleasableAmount(vestingId)).to.be.equal(4100);
+            await time.increase(10);
+            expect(await vesting.computeReleasableAmount(vestingId)).to.be.equal(4000);
 
         });
 
