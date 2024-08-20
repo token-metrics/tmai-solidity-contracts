@@ -434,38 +434,12 @@ contract TMAIStakingMock is
         emit Deposit(msg.sender, DEFAULT_POOL, _amount);
     }
 
-    function calculateStakingScore(
-        address _user
-    ) public view returns (uint256) {
-        StakeInfo[] storage stakes = userStakeInfo[_user];
-        uint256 totalStakingScore = 0;
-        uint256 currentTime = block.timestamp;
-
-        for (uint256 i = 0; i < stakes.length; i++) {
-            uint256 duration = currentTime.sub(stakes[i].timestamp);         
-            if (duration > SECONDS_IN_MONTH) {
-                // Calculate the effective duration in months
-                uint256 effectiveDuration = duration.div(SECONDS_IN_MONTH);
-
-                // Cap the effective duration at 12 months
-                if (effectiveDuration > 12) {
-                    effectiveDuration = 12;
-                }
-
-                // Calculate the staking score for this stake
-                uint256 stakeScore = stakes[i]
-                    .amount
-                    .mul(effectiveDuration)
-                    .div(12);
-                totalStakingScore = totalStakingScore.add(stakeScore);
-            }
-        }
-
-        return totalStakingScore;
-    }
-
     function withdraw(bool _withStake) external {
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
+        
+        // Ensure the user has staked some amount
+        require(user.amount > 0, "withdraw: nothing to withdraw");
+
         if (user.cooldown == false) {
             user.cooldown = true;
             user.cooldowntimestamp = block.timestamp;
@@ -477,26 +451,88 @@ contract TMAIStakingMock is
             );
             user.cooldown = false;
             user.cooldowntimestamp = 0;
-            _withdraw(_withStake);
+
+            uint256 totalWithdrawn = 0;
+
+            // Iterate through all stakes and withdraw the full amount
+            for (uint256 i = 0; i < userStakeInfo[msg.sender].length; i++) {
+                StakeInfo storage stake = userStakeInfo[msg.sender][i];
+
+                // Check if the stake has already been withdrawn
+                if (stake.withdrawTime == 0 && stake.amount > 0) {
+                    // Add the amount from each stake to the total withdrawn amount
+                    totalWithdrawn = totalWithdrawn.add(stake.amount);
+                    
+                    // Mark stake as withdrawn by setting withdrawTime
+                    stake.withdrawTime = block.timestamp;
+                    
+                    // Reset the stake amount to 0 since it's withdrawn
+                    stake.amount = 0;
+                }
+            }
+
+            require(totalWithdrawn > 0, "withdraw: no eligible stakes for withdrawal");
+
+            // Withdraw the total amount
+            _withdraw(totalWithdrawn, _withStake);
+
+            // Update the user's total staked amount to zero
+            user.amount = 0;
         }
     }
 
-    function _withdraw(bool _withStake) internal {
+    function _withdraw(uint256 _amount, bool _withStake) internal {
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 _amount = user.amount;
-        require(user.amount >= _amount, "withdraw: not good");
+        
         if (_withStake) {
             restakeReward();
         } else {
             claimReward();
         }
-        user.amount = user.amount.sub(_amount);
-        user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
+
+        // Update user's reward debt and the pool's total staked amount
+        user.rewardDebt = 0;
         pool.totalStaked = pool.totalStaked.sub(_amount);
+
+        // Transfer the withdrawn amount to the user
         pool.lpToken.safeTransfer(msg.sender, _amount);
-        removeHighestStakedUser( user.amount, msg.sender);
+        removeHighestStakedUser(user.amount, msg.sender);
+
         emit Withdraw(msg.sender, DEFAULT_POOL, _amount);
+    }
+
+    function calculateStakingScore(
+        address _user
+    ) public view returns (uint256) {
+        StakeInfo[] storage stakes = userStakeInfo[_user];
+        uint256 totalStakingScore = 0;
+        uint256 currentTime = block.timestamp;
+
+        for (uint256 i = 0; i < stakes.length; i++) {
+            if (stakes[i].withdrawTime == 0) { // Only consider non-withdrawn stakes
+                uint256 duration = currentTime.sub(stakes[i].timestamp);
+
+                if (duration > SECONDS_IN_MONTH) {
+                    // Calculate the effective duration in months
+                    uint256 effectiveDuration = duration.div(SECONDS_IN_MONTH);
+
+                    // Cap the effective duration at 12 months
+                    if (effectiveDuration > 12) {
+                        effectiveDuration = 12;
+                    }
+
+                    // Calculate the staking score for this stake
+                    uint256 stakeScore = stakes[i]
+                        .amount
+                        .mul(effectiveDuration)
+                        .div(12);
+                    totalStakingScore = totalStakingScore.add(stakeScore);
+                }
+            }
+        }
+
+        return totalStakingScore;
     }
 
     function restakeReward() public {
