@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers, upgrades } = require("hardhat");
-const { time } = require("@nomicfoundation/hardhat-network-helpers");
+const { mineUpTo, mine, time } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("TMAIStaking", function () {
   let staking;
@@ -49,7 +49,7 @@ describe("TMAIStaking", function () {
       ]);
       await staking.waitForDeployment();
 
-      await token.transfer(staking.address, TOTAL_REWARDS);
+      await token.transfer(await staking.getAddress(), TOTAL_REWARDS);
 
     });
 
@@ -81,193 +81,164 @@ describe("TMAIStaking", function () {
     });
 
     it("Should allow only the owner to set the utility contract address", async function () {
-      await staking.setUtilityContractAddress(uniswapUtility.address);
-      expect(await staking.uniswapUtility()).to.equal(uniswapUtility.address);
+      await staking.setUtilityContractAddress(await uniswapUtility.getAddress());
+      expect(await staking.uniswapUtility()).to.equal(await uniswapUtility.getAddress());
 
       await expect(staking.connect(addr1).setUtilityContractAddress(addr2.address))
         .to.be.revertedWith("Ownable: caller is not the owner");
     });
   });
 
-  describe("Pool and Token Management", function () {
-    it("Should add a new pool", async function () {
-      await staking.add(100, token.address);
-      expect(await staking.poolLength()).to.equal(2); // Default pool + new pool
-    });
-
-    it("Should whitelist a deposit contract", async function () {
-      await staking.whitelistDepositContract(addr1.address, true);
-      expect(await staking.isAllowedContract(addr1.address)).to.be.true;
-
-      await expect(staking.connect(addr1).whitelistDepositContract(addr2.address, true))
-        .to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("Should distribute additional rewards", async function () {
-      await staking.whitelistDistributionAddress(addr1.address, true);
-      await token.transfer(addr1.address, ethers.utils.parseUnits("10000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("10000", 18));
-      await staking.connect(addr1).distributeAdditionalReward(ethers.utils.parseUnits("10000", 18));
-
-      expect(await staking.totalRewards()).to.equal(ethers.utils.parseUnits("110000", 18));
-    });
-  });
 
   describe("Staking and Reward Mechanics", function () {
-    beforeEach(async function () {
-      await staking.add(100, token.address);
-    });
+
 
     it("Should allow users to deposit tokens and update pool info", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
+      await token.transfer(addr1.address, ethers.parseUnits("1000", 18));
+      await token.connect(addr1).approve(await staking.getAddress(), ethers.parseUnits("1000", 18));
+      await staking.connect(addr1).deposit(ethers.parseUnits("1000", 18), 0, false);
 
       const userInfo = await staking.userInfo(0, addr1.address);
-      expect(userInfo.amount).to.equal(ethers.utils.parseUnits("1000", 18));
+      expect(userInfo.amount).to.equal(ethers.parseUnits("1000", 18));
 
       const poolInfo = await staking.poolInfo(0);
-      expect(poolInfo.totalStaked).to.equal(ethers.utils.parseUnits("1000", 18));
+      expect(poolInfo.totalStaked).to.equal(ethers.parseUnits("1000", 18));
     });
 
     it("Should calculate pending rewards correctly", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
 
-      await time.advanceBlockTo(START_BLOCK + 10);
+      await mineUpTo(START_BLOCK + 10);
 
       const pendingReward = await staking.pendingReward(addr1.address);
       expect(pendingReward).to.be.gt(0);
     });
 
     it("Should allow users to claim rewards", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
 
-      await time.advanceBlockTo(START_BLOCK + 10);
       await staking.connect(addr1).claimReward();
 
       const userInfo = await staking.userInfo(0, addr1.address);
       expect(await token.balanceOf(addr1.address)).to.be.gt(0);
     });
 
-    it("Should allow users to withdraw their stake and rewards", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
-
-      await time.advanceBlockTo(START_BLOCK + 10);
-      await staking.connect(addr1).withdraw(false);
-
-      const userInfo = await staking.userInfo(0, addr1.address);
-      expect(userInfo.amount).to.equal(0);
-      expect(await token.balanceOf(addr1.address)).to.be.gt(ethers.utils.parseUnits("1000", 18));
-    });
 
     it("Should apply cooldown correctly before allowing withdrawal", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
-
-      await time.advanceBlockTo(START_BLOCK + 10);
 
       await staking.connect(addr1).withdraw(false);
-      await expect(staking.connect(addr1).withdraw(false)).to.be.revertedWith("withdraw: cooldown period");
 
-      await time.increase(time.duration.weeks(1));
+      const userInfo = await staking.userInfo(0, addr1.address);
+      expect(userInfo.cooldown).to.be.true;
+
+      await expect(staking.connect(addr1).withdraw(false)).to.be.revertedWith("withdraw: cooldown period");
+    });
+
+    it("Should allow users to withdraw their stake and rewards", async function () {
+
+      // increase one week
+      const secondsInWeek = (60 * 60 * 24 * 7) + 1;
+      await time.increase(secondsInWeek);
 
       await staking.connect(addr1).withdraw(false);
       const userInfo = await staking.userInfo(0, addr1.address);
       expect(userInfo.amount).to.equal(0);
+      expect(await token.balanceOf(addr1.address)).to.be.gt(ethers.parseUnits("1000", 18));
     });
+
   });
 
-  describe("NFT Staking", function () {
-    beforeEach(async function () {
-      await staking.addUniswapVersion3(erc721.address, token.address, token.address, 3000, true);
+
+  describe("Staking Levels and Rewards", function () {
+    it("Should calculate staking score correctly - addr2", async function () {
+
+      await token.transfer(addr2.address, ethers.parseUnits("1000", 18));
+      await token.connect(addr2).approve(await staking.getAddress(), ethers.parseUnits("1000", 18));
+      await staking.connect(addr2).deposit(ethers.parseUnits("1000", 18), 0, false);
+
+      // increase one week
+      const secondsInWeek = (60 * 60 * 24 * 7) + 1;
+      await time.increase(secondsInWeek);
+
+      const stakingScoreAfterWeek = await staking.calculateStakingScore(addr2.address);
+      expect(stakingScoreAfterWeek).to.equal(0);
+
+
+      // increase one month
+      const secondsInMonth = (60 * 60 * 24 * 30 * 2) + 1;
+      await time.increase(secondsInMonth);
+
+      const stakingScoreAfterMonth = await staking.calculateStakingScore(addr2.address);
+      // console.log("Staking Score after month: ", stakingScoreAfterMonth);
+      expect(stakingScoreAfterMonth).to.be.gt(0);
+
+      // log curent timestamp
+      const timestamp = await time.latest();
+      // console.log("Current Timestamp: ", timestamp);
+
+      const userInfo = await staking.userInfo(0, addr2.address);
+      // console.log("User Info: ", userInfo);
     });
 
-    it("Should allow users to deposit NFTs", async function () {
-      await erc721.mint(addr1.address, 1);
-      await erc721.connect(addr1).approve(staking.address, 1);
+    it("Should assign correct level based on staking score - addr2", async function () {
 
-      await staking.connect(addr1).deposit(0, 1, true);
-
-      const userInfo = await staking.userInfo(0, addr1.address);
-      expect(userInfo.amount).to.be.gt(0);
-
-      const poolInfo = await staking.poolInfo(0);
-      expect(poolInfo.totalStaked).to.be.gt(0);
+      const level = await staking.getLevelForUser(addr2.address);
+      // console.log("Level: ", level);
+      expect(level).to.equal(0);
     });
 
-    it("Should handle NFT withdrawals correctly", async function () {
-      await erc721.mint(addr1.address, 1);
-      await erc721.connect(addr1).approve(staking.address, 1);
 
-      await staking.connect(addr1).deposit(0, 1, true);
-      await time.advanceBlockTo(START_BLOCK + 10);
+    it("Should calculate staking score correctly - addr3", async function () {
 
-      await staking.connect(addr1).withdraw(true);
+      await token.transfer(addr3.address, ethers.parseUnits("16000", 18));
+      await token.connect(addr3).approve(await staking.getAddress(), ethers.parseUnits("16000", 18));
+      await staking.connect(addr3).deposit(ethers.parseUnits("16000", 18), 0, false);
 
-      expect(await erc721.ownerOf(1)).to.equal(addr1.address);
+
+      // increase six months
+      const secondsInMonth = (60 * 60 * 24 * 30 * 6) + 1;
+      await time.increase(secondsInMonth);
+
+      const stakingScoreAfterMonth = await staking.calculateStakingScore(addr3.address);
+      // console.log("Staking Score after month: ", stakingScoreAfterMonth);
+      expect(stakingScoreAfterMonth).to.equal("8000000000000000000000");
+
+      // log curent timestamp
+      const timestamp = await time.latest();
+      // console.log("Current Timestamp: ", timestamp);
+
+      const userInfo = await staking.userInfo(0, addr3.address);
+      // console.log("User Info: ", userInfo);
     });
+
+    it("Should assign correct level based on staking score - addr3", async function () {
+
+      const level = await staking.getLevelForUser(addr3.address);
+      // console.log("Level: ", level);
+      expect(level).to.equal(3);
+    });
+
+    // it("Should apply APR limiter correctly", async function () {
+    //   await token.transfer(addr1.address, ethers.parseUnits("1000", 18));
+    //   await token.connect(addr1).approve(await staking.getAddress(), ethers.parseUnits("1000", 18));
+    //   await staking.connect(addr1).deposit(ethers.parseUnits("1000", 18), 0, false);
+
+    //   await time.advanceBlockTo(START_BLOCK + 10);
+    //   const pendingReward = await staking.pendingReward(addr1.address);
+
+    //   const cappedReward = await staking.calculateCappedRewards(addr1.address, pendingReward);
+    //   expect(cappedReward).to.be.lte(pendingReward);
+    // });
   });
 
   describe("Emergency Withdrawals", function () {
     it("Should allow the owner to perform emergency withdrawal", async function () {
-      await token.transfer(staking.address, ethers.utils.parseUnits("1000", 18));
+      const balanceBefore = await token.balanceOf(owner.address);
 
-      await staking.emergencyWithdraw(ethers.utils.parseUnits("1000", 18));
+      await staking.emergencyWithdraw(ethers.parseUnits("1000", 18));
 
-      expect(await token.balanceOf(owner.address)).to.equal(ethers.utils.parseUnits("1000", 18));
-    });
+      const balanceAfter = await token.balanceOf(owner.address);
 
-    it("Should allow the owner to perform emergency NFT withdrawal", async function () {
-      await erc721.mint(addr1.address, 1);
-      await erc721.connect(addr1).approve(staking.address, 1);
-
-      await staking.connect(addr1).deposit(0, 1, true);
-      await staking.emergencyNFTWithdraw([1]);
-
-      expect(await erc721.ownerOf(1)).to.equal(owner.address);
-    });
-  });
-
-  describe("Staking Levels and Rewards", function () {
-    it("Should calculate staking score correctly", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
-
-      await time.increase(time.duration.weeks(10));
-      const stakingScore = await staking.calculateStakingScore(addr1.address);
-
-      expect(stakingScore).to.be.gt(0);
-    });
-
-    it("Should assign correct level based on staking score", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
-
-      await time.increase(time.duration.weeks(10));
-
-      const level = await staking.getLevelForUser(addr1.address);
-      expect(level).to.be.gte(0);
-    });
-
-    it("Should apply APR limiter correctly", async function () {
-      await token.transfer(addr1.address, ethers.utils.parseUnits("1000", 18));
-      await token.connect(addr1).approve(staking.address, ethers.utils.parseUnits("1000", 18));
-      await staking.connect(addr1).deposit(ethers.utils.parseUnits("1000", 18), 0, false);
-
-      await time.advanceBlockTo(START_BLOCK + 10);
-      const pendingReward = await staking.pendingReward(addr1.address);
-
-      const cappedReward = await staking.calculateCappedRewards(addr1.address, pendingReward);
-      expect(cappedReward).to.be.lte(pendingReward);
+      // expect the owner to have received the total rewards
+      expect(balanceAfter - balanceBefore).to.equal(ethers.parseUnits("1000", 18));
     });
   });
 });

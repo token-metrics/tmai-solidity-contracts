@@ -36,8 +36,6 @@ contract TMAIStakingMock is
     struct UserInfo {
         uint256 amount;
         uint256 rewardDebt;
-        uint256 stakingScore;
-        uint256 lastDeposit;
         bool cooldown;
         uint256 cooldowntimestamp;
     }
@@ -146,23 +144,23 @@ contract TMAIStakingMock is
     function getLevelFromStakingScore(
         uint256 stakingScore
     ) public pure returns (Level) {
-        if (stakingScore >= 500_000) {
+        if (stakingScore >= 500_000 ether) {
             return Level.Level9;
-        } else if (stakingScore >= 250_000) {
+        } else if (stakingScore >= 250_000 ether) {
             return Level.Level8;
-        } else if (stakingScore >= 125_000) {
+        } else if (stakingScore >= 125_000 ether) {
             return Level.Level7;
-        } else if (stakingScore >= 63_000) {
+        } else if (stakingScore >= 63_000 ether) {
             return Level.Level6;
-        } else if (stakingScore >= 32_000) {
+        } else if (stakingScore >= 32_000 ether) {
             return Level.Level5;
-        } else if (stakingScore >= 16_000) {
+        } else if (stakingScore >= 16_000 ether) {
             return Level.Level4;
-        } else if (stakingScore >= 8_000) {
+        } else if (stakingScore >= 8_000 ether) {
             return Level.Level3;
-        } else if (stakingScore >= 4_000) {
+        } else if (stakingScore >= 4_000 ether) {
             return Level.Level2;
-        } else if (stakingScore >= 2_000) {
+        } else if (stakingScore >= 2_000 ether) {
             return Level.Level1;
         } else {
             return Level.Level0;
@@ -292,44 +290,45 @@ contract TMAIStakingMock is
         }
     }
 
-
     function getUpdatedAccTokenPerShare() internal view returns (uint256) {
-    PoolInfo storage pool = poolInfo[DEFAULT_POOL];
-    uint256 accTokenPerShare = pool.accTokenPerShare;
-    uint256 lpSupply = pool.totalStaked;
-    uint256 PoolEndBlock = block.number;
-    if (PoolEndBlock > bonusEndBlock) {
-        PoolEndBlock = bonusEndBlock;
+        PoolInfo storage pool = poolInfo[DEFAULT_POOL];
+        uint256 accTokenPerShare = pool.accTokenPerShare;
+        uint256 lpSupply = pool.totalStaked;
+        uint256 PoolEndBlock = block.number;
+        if (PoolEndBlock > bonusEndBlock) {
+            PoolEndBlock = bonusEndBlock;
+        }
+        if (PoolEndBlock > pool.lastRewardBlock && lpSupply != 0) {
+            uint256 multiplier = getMultiplier(
+                pool.lastRewardBlock,
+                PoolEndBlock
+            );
+            uint256 tokenReward = multiplier
+                .mul(tokenPerBlock)
+                .mul(pool.allocPoint)
+                .div(totalAllocPoint);
+            accTokenPerShare = accTokenPerShare.add(
+                tokenReward.mul(1e12).div(lpSupply)
+            );
+        }
+        return accTokenPerShare;
     }
-    if (PoolEndBlock > pool.lastRewardBlock && lpSupply != 0) {
-        uint256 multiplier = getMultiplier(pool.lastRewardBlock, PoolEndBlock);
-        uint256 tokenReward = multiplier
-            .mul(tokenPerBlock)
-            .mul(pool.allocPoint)
-            .div(totalAllocPoint);
-        accTokenPerShare = accTokenPerShare.add(
-            tokenReward.mul(1e12).div(lpSupply)
-        );
+
+    function pendingReward(address _user) external view returns (uint256) {
+        UserInfo storage user = userInfo[DEFAULT_POOL][_user];
+
+        uint256 accTokenPerShare = getUpdatedAccTokenPerShare();
+
+        uint256 multiplier = getStakingMultiplier(_user);
+        uint256 pending = unClaimedReward[_user]
+            .add(
+                user.amount.mul(accTokenPerShare).div(1e12).sub(user.rewardDebt)
+            )
+            .mul(multiplier)
+            .div(1000);
+
+        return calculateCappedRewards(_user, pending);
     }
-    return accTokenPerShare;
-}
-
-function pendingReward(address _user) external view returns (uint256) {
-    UserInfo storage user = userInfo[DEFAULT_POOL][_user];
-
-    uint256 accTokenPerShare = getUpdatedAccTokenPerShare();
-
-    uint256 multiplier = getStakingMultiplier(user.stakingScore);
-    uint256 pending = unClaimedReward[_user]
-        .add(
-            user.amount.mul(accTokenPerShare).div(1e12).sub(user.rewardDebt)
-        )
-        .mul(multiplier)
-        .div(1000);
-
-    return calculateCappedRewards(_user, pending);
-}
-
 
     function massUpdatePools() public {
         uint256 length = poolInfo.length;
@@ -430,9 +429,8 @@ function pendingReward(address _user) external view returns (uint256) {
             );
         }
         user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
-        user.lastDeposit = block.timestamp;
-        user.stakingScore = calculateStakingScore(msg.sender);
         pool.totalStaked = pool.totalStaked.add(_amount);
+        addHighestStakedUser(user.amount, msg.sender);
         emit Deposit(msg.sender, DEFAULT_POOL, _amount);
     }
 
@@ -440,24 +438,30 @@ function pendingReward(address _user) external view returns (uint256) {
         address _user
     ) public view returns (uint256) {
         StakeInfo[] storage stakes = userStakeInfo[_user];
-        uint256 totalStake = 0;
-        uint256 totalDuration = 0;
+        uint256 totalStakingScore = 0;
         uint256 currentTime = block.timestamp;
 
         for (uint256 i = 0; i < stakes.length; i++) {
-            uint256 duration = currentTime.sub(stakes[i].timestamp);
+            uint256 duration = currentTime.sub(stakes[i].timestamp);         
             if (duration > SECONDS_IN_MONTH) {
-                uint256 effectiveDuration = duration > SECONDS_IN_MONTH * 12
-                    ? SECONDS_IN_MONTH * 12
-                    : duration;
-                totalStake = totalStake.add(
-                    stakes[i].amount.mul(effectiveDuration)
-                );
-                totalDuration = totalDuration.add(effectiveDuration);
+                // Calculate the effective duration in months
+                uint256 effectiveDuration = duration.div(SECONDS_IN_MONTH);
+
+                // Cap the effective duration at 12 months
+                if (effectiveDuration > 12) {
+                    effectiveDuration = 12;
+                }
+
+                // Calculate the staking score for this stake
+                uint256 stakeScore = stakes[i]
+                    .amount
+                    .mul(effectiveDuration)
+                    .div(12);
+                totalStakingScore = totalStakingScore.add(stakeScore);
             }
         }
 
-        return totalDuration > 0 ? totalStake.div(totalDuration) : 0;
+        return totalStakingScore;
     }
 
     function withdraw(bool _withStake) external {
@@ -472,6 +476,7 @@ function pendingReward(address _user) external view returns (uint256) {
                 "withdraw: cooldown period"
             );
             user.cooldown = false;
+            user.cooldowntimestamp = 0;
             _withdraw(_withStake);
         }
     }
@@ -489,8 +494,8 @@ function pendingReward(address _user) external view returns (uint256) {
         user.amount = user.amount.sub(_amount);
         user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
         pool.totalStaked = pool.totalStaked.sub(_amount);
-        user.stakingScore = calculateStakingScore(msg.sender);
         pool.lpToken.safeTransfer(msg.sender, _amount);
+        removeHighestStakedUser( user.amount, msg.sender);
         emit Withdraw(msg.sender, DEFAULT_POOL, _amount);
     }
 
@@ -498,10 +503,12 @@ function pendingReward(address _user) external view returns (uint256) {
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 multiplier = getStakingMultiplier(user.stakingScore);
+        uint256 multiplier = getStakingMultiplier(msg.sender);
         uint256 pending = unClaimedReward[msg.sender]
             .add(
-                user.amount.mul(pool.accTokenPerShare).div(1e12).sub(user.rewardDebt)
+                user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
+                    user.rewardDebt
+                )
             )
             .mul(multiplier)
             .div(1000);
@@ -519,10 +526,12 @@ function pendingReward(address _user) external view returns (uint256) {
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 multiplier = getStakingMultiplier(user.stakingScore);
+        uint256 multiplier = getStakingMultiplier(msg.sender);
         uint256 pending = unClaimedReward[msg.sender]
             .add(
-                user.amount.mul(pool.accTokenPerShare).div(1e12).sub(user.rewardDebt)
+                user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
+                    user.rewardDebt
+                )
             )
             .mul(multiplier)
             .div(1000);
@@ -718,8 +727,9 @@ function pendingReward(address _user) external view returns (uint256) {
     }
 
     function getStakingMultiplier(
-        uint256 stakingScore
+        address _user
     ) public view returns (uint256) {
+        uint256 stakingScore = calculateStakingScore(_user);
         return levelMultipliers[getLevelFromStakingScore(stakingScore)];
     }
 
@@ -728,7 +738,7 @@ function pendingReward(address _user) external view returns (uint256) {
         uint256 pending
     ) public view returns (uint256) {
         UserInfo storage user = userInfo[DEFAULT_POOL][_user];
-        Level userLevel = getLevelFromStakingScore(user.stakingScore);
+        Level userLevel = getLevelForUser(_user);
         uint256 aprLimiter = aprLimiters[userLevel];
         uint256 cappedRewards = user.amount.mul(aprLimiter).div(100);
         return pending > cappedRewards ? cappedRewards : pending;
