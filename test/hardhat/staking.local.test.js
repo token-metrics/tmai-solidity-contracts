@@ -148,6 +148,45 @@ describe("TMAIStaking", function () {
 
 
   describe("Staking Levels and Rewards", function () {
+
+    it("Should calculate staking score correctly - addr1", async function () {
+
+      await token.transfer(addr1.address, ethers.parseUnits("1000", 18));
+      await token.connect(addr1).approve(await staking.getAddress(), ethers.parseUnits("1000", 18));
+      await staking.connect(addr1).deposit(ethers.parseUnits("1000", 18), 0, false);
+
+      // increase one week
+      const secondsInWeek = (60 * 60 * 24 * 7) + 1;
+      await time.increase(secondsInWeek);
+
+      const stakingScoreAfterWeek = await staking.calculateStakingScore(addr1.address);
+      expect(stakingScoreAfterWeek).to.equal(0);
+
+
+      // increase one month
+      const secondsInMonth = (60 * 60 * 24 * 30 * 1) + 1;
+      await time.increase(secondsInMonth);
+
+      const stakingScoreAfterMonth = await staking.calculateStakingScore(addr1.address);
+      // console.log("Staking Score after month: ", stakingScoreAfterMonth);
+      expect(stakingScoreAfterMonth).to.be.gt(0);
+
+      // log curent timestamp
+      const timestamp = await time.latest();
+      // console.log("Current Timestamp: ", timestamp);
+
+      const userInfo = await staking.userInfo(0, addr1.address);
+      // console.log("User Info: ", userInfo);
+    });
+
+    it("Should assign correct level based on staking score - addr1", async function () {
+
+      const level = await staking.getLevelForUser(addr1.address);
+      // console.log("Level: ", level);
+      expect(level).to.equal(0);
+    });
+
+
     it("Should calculate staking score correctly - addr2", async function () {
 
       await token.transfer(addr2.address, ethers.parseUnits("1000", 18));
@@ -162,7 +201,7 @@ describe("TMAIStaking", function () {
       expect(stakingScoreAfterWeek).to.equal(0);
 
 
-      // increase one month
+      // increase two months
       const secondsInMonth = (60 * 60 * 24 * 30 * 2) + 1;
       await time.increase(secondsInMonth);
 
