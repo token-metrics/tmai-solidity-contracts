@@ -132,7 +132,7 @@ describe("TMAIStaking", function () {
       const userInfo = await staking.userInfo(0, addr1.address);
       expect(userInfo.cooldown).to.be.true;
 
-      await expect(staking.connect(addr1).withdraw(false)).to.be.revertedWith("withdraw: cooldown period");
+      await expect(staking.connect(addr1).withdraw()).to.be.revertedWith("withdraw: cooldown period");
     });
 
     it("Should allow users to withdraw their stake and rewards", async function () {
@@ -141,7 +141,7 @@ describe("TMAIStaking", function () {
       const secondsInWeek = (60 * 60 * 24 * 7) + 1;
       await time.increase(secondsInWeek);
 
-      await staking.connect(addr1).withdraw(false);
+      await staking.connect(addr1).withdraw();
       const userInfo = await staking.userInfo(0, addr1.address);
       expect(userInfo.amount).to.equal(0);
       expect(await token.balanceOf(addr1.address)).to.be.gt(ethers.parseUnits("1000", 18));
@@ -333,17 +333,112 @@ describe("TMAIStaking", function () {
       const pendingReward = await staking.pendingReward(addr5.address);
       console.log("Pending Reward: ", pendingReward);
 
-    
+
       await staking.connect(addr5).claimReward();
 
       const userLevel = await staking.getLevelForUser(addr5.address);
       const aprLimiter = await staking.aprLimiters(userLevel);
-      const expectedCappedReward =  BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+      const expectedCappedReward = BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
 
       // log token balance
       console.log("Token Balance: ", await token.balanceOf(addr5.address));
       expect(await token.balanceOf(addr5.address)).to.equal(expectedCappedReward);
     });
+
+    it("Should enforce capped rewards limit across multiple withdrawals", async function () {
+      await token.transfer(addr6.address, ethers.parseUnits("16000", 18));
+      await token.connect(addr6).approve(await staking.getAddress(), ethers.parseUnits("16000", 18));
+      await staking.connect(addr6).deposit(ethers.parseUnits("16000", 18), 0, false);
+
+      await time.increase(SECONDS_IN_MONTH * 2);  // After 2 months
+      let pendingReward = await staking.pendingReward(addr6.address);
+      console.log("Pending Reward: ", pendingReward);
+      let userLevel = await staking.getLevelForUser(addr6.address);
+      console.log("User Level: ", userLevel);
+
+      await staking.connect(addr6).claimReward();  // First withdrawal
+      let totalClaimed = await token.balanceOf(addr6.address);
+      console.log("Total Claimed: ", totalClaimed);
+      expect(totalClaimed).to.equal(pendingReward);
+
+      await time.increase(SECONDS_IN_MONTH * 2);  // After 4 months
+      pendingReward = await staking.pendingReward(addr6.address);
+      console.log("Pending Reward: ", pendingReward);
+      userLevel = await staking.getLevelForUser(addr6.address);
+      console.log("User Level: ", userLevel);
+
+
+      await staking.connect(addr6).claimReward();  // Second withdrawal
+      totalClaimed = await token.balanceOf(addr6.address);
+      console.log("Total Claimed: ", totalClaimed);
+
+      await time.increase(SECONDS_IN_MONTH * 4);  // After 8 months
+      pendingReward = await staking.pendingReward(addr6.address);
+      console.log("Pending Reward: ", pendingReward);
+      userLevel = await staking.getLevelForUser(addr6.address);
+      console.log("User Level: ", userLevel);
+
+      await staking.connect(addr6).claimReward();  // Final withdrawal
+      totalClaimed = await token.balanceOf(addr6.address);
+      console.log("Total Claimed: ", totalClaimed);
+
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const maxTotalReward = BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      expect(totalClaimed).to.be.closeTo(BigInt(maxTotalReward), BigInt(ethers.parseUnits("1", 18)));  // Ensure total rewards do not exceed capped rewards
+    });
+
+    it("Should correctly apply capped rewards after withdrawal and re-deposit", async function () {
+
+      // Now withdraw the entire stake
+      await staking.connect(addr6).activateCooldown();
+
+      // Increase time by 1 week to pass cooldown period
+      await time.increase(60 * 60 * 24 * 7 + 1);
+
+      let pendingReward = await staking.pendingReward(addr6.address);
+      console.log("Pending Reward: ", pendingReward);
+      let userLevel = await staking.getLevelForUser(addr6.address);
+      console.log("User Level: ", userLevel);
+
+      let userInfo = await staking.userInfo(0, addr6.address);
+      console.log("User Info after cooldown: ", userInfo);
+
+      await staking.connect(addr6).withdraw();
+      userInfo = await staking.userInfo(0, addr6.address);
+      expect(userInfo.amount).to.equal(0);  // Ensure stake is withdrawn
+
+      // Re-deposit the same amount
+      await token.connect(addr6).approve(await staking.getAddress(), ethers.parseUnits("16000", 18));
+      await staking.connect(addr6).deposit(ethers.parseUnits("16000", 18), 0, false);
+
+      // Increase time by another 6 months
+      await time.increase(SECONDS_IN_MONTH * 6);
+
+      // Check pending reward after re-deposit
+      pendingReward = await staking.pendingReward(addr6.address);
+      console.log("Pending Reward after re-deposit: ", pendingReward);
+
+      userLevel = await staking.getLevelForUser(addr6.address);
+      console.log("User Level after re-deposit: ", userLevel);
+
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const expectedCappedReward = BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      // Ensure the pending reward is capped correctly
+      expect(pendingReward).to.be.lessThanOrEqual(expectedCappedReward);
+
+      // Claim the reward again and ensure the total is correct
+      let balanceBefore = await token.balanceOf(addr6.address);
+      await staking.connect(addr6).claimReward();
+      let balanceAfter = await token.balanceOf(addr6.address);
+      totalClaimed = balanceAfter - balanceBefore;
+      console.log("Total Claimed after re-deposit: ", totalClaimed);
+
+      // The total claimed should not exceed the capped limit
+      expect(totalClaimed).to.be.lessThanOrEqual(expectedCappedReward);
+  });
+
 
   });
 

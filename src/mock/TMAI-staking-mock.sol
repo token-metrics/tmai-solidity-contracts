@@ -107,7 +107,6 @@ contract TMAIStakingMock is
     );
     event AddPool(address indexed token0, address indexed token1);
     event DistributeReward(uint256 indexed rewardAmount);
-    event RestakedReward(address _userAddress, uint256 indexed _amount);
     event ClaimedReward(address _userAddress, uint256 indexed _amount);
     event WhitelistDepositContract(
         address indexed _contractAddress,
@@ -317,9 +316,7 @@ contract TMAIStakingMock is
 
     function pendingReward(address _user) external view returns (uint256) {
         UserInfo storage user = userInfo[DEFAULT_POOL][_user];
-
         uint256 accTokenPerShare = getUpdatedAccTokenPerShare();
-
         Level userLevel = getLevelForUser(_user);
         uint256 multiplier = levelMultipliers[userLevel];
 
@@ -412,7 +409,6 @@ contract TMAIStakingMock is
         uint256 _tokenId,
         bool _isERC721
     ) internal {
-
         require(
             _amount > 0 || _isERC721,
             "Deposit: No amount or NFT specified"
@@ -468,7 +464,7 @@ contract TMAIStakingMock is
         user.cooldowntimestamp = block.timestamp;
     }
 
-    function withdraw(bool _withStake) external {
+    function withdraw() external {
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
 
         // Ensure the user has staked some amount
@@ -481,6 +477,9 @@ contract TMAIStakingMock is
         user.cooldown = false;
         user.cooldowntimestamp = 0;
 
+        
+        claimReward();
+
         uint256 totalWithdrawn = 0;
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
 
@@ -488,28 +487,19 @@ contract TMAIStakingMock is
             StakeInfo storage stake = userStakeInfo[msg.sender][i];
 
             if (stake.withdrawTime == 0 && stake.amount > 0) {
-
                 if (stake.isERC721) {
                     erc721Token.safeTransferFrom(
                         address(this),
                         msg.sender,
                         stake.tokenId
                     );
-                }
-                else{
+                } else {
                     totalWithdrawn = totalWithdrawn.add(stake.amount);
                 }
 
                 stake.withdrawTime = block.timestamp;
                 stake.amount = 0;
             }
-        }
-        
-        
-        if (_withStake) {
-            restakeReward();
-        } else {
-            claimReward();
         }
 
         pool.totalStaked = pool.totalStaked.sub(user.amount);
@@ -522,38 +512,7 @@ contract TMAIStakingMock is
 
         user.amount = 0;
         user.rewardDebt = 0;
-    }
-
-
-    function restakeReward() public {
-        updatePool();
-        PoolInfo storage pool = poolInfo[DEFAULT_POOL];
-        UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-
-        Level userLevel = getLevelForUser(msg.sender);
-        uint256 multiplier = levelMultipliers[userLevel];
-
-        uint256 pending = unClaimedReward[msg.sender]
-            .add(
-                user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
-                    user.rewardDebt
-                )
-            )
-            .mul(multiplier)
-            .div(1000);
-
-        uint256 cappedPending = calculateCappedRewards(
-            msg.sender,
-            userLevel,
-            pending
-        );
-        if (cappedPending > 0) {
-            user.amount = user.amount.add(cappedPending);
-            unClaimedReward[msg.sender] = 0;
-            user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
-            pool.totalStaked = pool.totalStaked.add(cappedPending);
-            emit RestakedReward(msg.sender, cappedPending);
-        }
+        user.totalClaimedRewards = 0; // Reset total claimed rewards on withdraw
     }
 
     function calculateStakingScore(
@@ -614,6 +573,9 @@ contract TMAIStakingMock is
         );
         if (cappedPending > 0) {
             safeTokenTransfer(msg.sender, cappedPending);
+            user.totalClaimedRewards = user.totalClaimedRewards.add(
+                cappedPending
+            );
             unClaimedReward[msg.sender] = 0;
             emit ClaimedReward(msg.sender, cappedPending);
         }
@@ -815,7 +777,8 @@ contract TMAIStakingMock is
     ) public view returns (uint256) {
         UserInfo storage user = userInfo[DEFAULT_POOL][_user];
         uint256 aprLimiter = aprLimiters[userLevel];
-        uint256 cappedRewards = user.amount.mul(aprLimiter).div(100);
-        return pending > cappedRewards ? cappedRewards : pending;
+        uint256 cumulativeCap = user.amount.mul(aprLimiter).div(100);
+        uint256 remainingCap = cumulativeCap.sub(user.totalClaimedRewards);
+        return pending > remainingCap ? remainingCap : pending;
     }
 }
