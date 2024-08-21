@@ -436,57 +436,61 @@ contract TMAIStakingMock is
         emit Deposit(msg.sender, DEFAULT_POOL, _amount);
     }
 
+    function activateCooldown() external {
+        UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
+        require(user.cooldown == false, "cooldown: already in cooldown");
+        user.cooldown = true;
+        user.cooldowntimestamp = block.timestamp;
+    }
+
     function withdraw(bool _withStake) external {
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        
+
         // Ensure the user has staked some amount
         require(user.amount > 0, "withdraw: nothing to withdraw");
 
-        if (user.cooldown == false) {
-            user.cooldown = true;
-            user.cooldowntimestamp = block.timestamp;
-            return;
-        } else {
-            require(
-                block.timestamp >= user.cooldowntimestamp.add(SECONDS_IN_WEEK),
-                "withdraw: cooldown period"
-            );
-            user.cooldown = false;
-            user.cooldowntimestamp = 0;
+        require(
+            block.timestamp >= user.cooldowntimestamp.add(SECONDS_IN_WEEK),
+            "withdraw: cooldown period"
+        );
+        user.cooldown = false;
+        user.cooldowntimestamp = 0;
 
-            uint256 totalWithdrawn = 0;
+        uint256 totalWithdrawn = 0;
 
-            // Iterate through all stakes and withdraw the full amount
-            for (uint256 i = 0; i < userStakeInfo[msg.sender].length; i++) {
-                StakeInfo storage stake = userStakeInfo[msg.sender][i];
+        // Iterate through all stakes and withdraw the full amount
+        for (uint256 i = 0; i < userStakeInfo[msg.sender].length; i++) {
+            StakeInfo storage stake = userStakeInfo[msg.sender][i];
 
-                // Check if the stake has already been withdrawn
-                if (stake.withdrawTime == 0 && stake.amount > 0) {
-                    // Add the amount from each stake to the total withdrawn amount
-                    totalWithdrawn = totalWithdrawn.add(stake.amount);
-                    
-                    // Mark stake as withdrawn by setting withdrawTime
-                    stake.withdrawTime = block.timestamp;
-                    
-                    // Reset the stake amount to 0 since it's withdrawn
-                    stake.amount = 0;
-                }
+            // Check if the stake has already been withdrawn
+            if (stake.withdrawTime == 0 && stake.amount > 0) {
+                // Add the amount from each stake to the total withdrawn amount
+                totalWithdrawn = totalWithdrawn.add(stake.amount);
+
+                // Mark stake as withdrawn by setting withdrawTime
+                stake.withdrawTime = block.timestamp;
+
+                // Reset the stake amount to 0 since it's withdrawn
+                stake.amount = 0;
             }
-
-            require(totalWithdrawn > 0, "withdraw: no eligible stakes for withdrawal");
-
-            // Withdraw the total amount
-            _withdraw(totalWithdrawn, _withStake);
-
-            // Update the user's total staked amount to zero
-            user.amount = 0;
         }
+
+        require(
+            totalWithdrawn > 0,
+            "withdraw: no eligible stakes for withdrawal"
+        );
+
+        // Withdraw the total amount
+        _withdraw(totalWithdrawn, _withStake);
+
+        // Update the user's total staked amount to zero
+        user.amount = 0;
     }
 
     function _withdraw(uint256 _amount, bool _withStake) internal {
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        
+
         if (_withStake) {
             restakeReward();
         } else {
@@ -512,7 +516,8 @@ contract TMAIStakingMock is
         uint256 currentTime = block.timestamp;
 
         for (uint256 i = 0; i < stakes.length; i++) {
-            if (stakes[i].withdrawTime == 0) { // Only consider non-withdrawn stakes
+            if (stakes[i].withdrawTime == 0) {
+                // Only consider non-withdrawn stakes
                 uint256 duration = currentTime.sub(stakes[i].timestamp);
 
                 if (duration > SECONDS_IN_MONTH) {
@@ -553,8 +558,12 @@ contract TMAIStakingMock is
             )
             .mul(multiplier)
             .div(1000);
-            
-        uint256 cappedPending = calculateCappedRewards(msg.sender, userLevel, pending);
+
+        uint256 cappedPending = calculateCappedRewards(
+            msg.sender,
+            userLevel,
+            pending
+        );
         if (cappedPending > 0) {
             user.amount = user.amount.add(cappedPending);
             unClaimedReward[msg.sender] = 0;
@@ -568,10 +577,10 @@ contract TMAIStakingMock is
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        
+
         Level userLevel = getLevelForUser(msg.sender);
         uint256 multiplier = levelMultipliers[userLevel];
-        
+
         uint256 pending = unClaimedReward[msg.sender]
             .add(
                 user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
@@ -581,7 +590,11 @@ contract TMAIStakingMock is
             .mul(multiplier)
             .div(1000);
 
-        uint256 cappedPending = calculateCappedRewards(msg.sender, userLevel, pending);
+        uint256 cappedPending = calculateCappedRewards(
+            msg.sender,
+            userLevel,
+            pending
+        );
         if (cappedPending > 0) {
             safeTokenTransfer(msg.sender, cappedPending);
             unClaimedReward[msg.sender] = 0;
@@ -773,9 +786,7 @@ contract TMAIStakingMock is
         return getLevelFromStakingScore(calculateStakingScore(_user));
     }
 
-    function getStakingMultiplier(
-        address _user
-    ) public view returns (uint256) {
+    function getStakingMultiplier(address _user) public view returns (uint256) {
         uint256 stakingScore = calculateStakingScore(_user);
         return levelMultipliers[getLevelFromStakingScore(stakingScore)];
     }

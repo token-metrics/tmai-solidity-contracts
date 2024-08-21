@@ -93,7 +93,6 @@ describe("TMAIStaking", function () {
     });
   });
 
-
   describe("Staking and Reward Mechanics", function () {
 
 
@@ -128,7 +127,7 @@ describe("TMAIStaking", function () {
 
     it("Should apply cooldown correctly before allowing withdrawal", async function () {
 
-      await staking.connect(addr1).withdraw(false);
+      await staking.connect(addr1).activateCooldown();
 
       const userInfo = await staking.userInfo(0, addr1.address);
       expect(userInfo.cooldown).to.be.true;
@@ -149,7 +148,6 @@ describe("TMAIStaking", function () {
     });
 
   });
-
 
   describe("Staking Levels and Rewards", function () {
 
@@ -349,7 +347,6 @@ describe("TMAIStaking", function () {
 
   });
 
-  
   describe("Emergency Withdrawals", function () {
     it("Should allow the owner to perform emergency withdrawal", async function () {
       const balanceBefore = await token.balanceOf(owner.address);
