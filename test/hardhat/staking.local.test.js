@@ -1,6 +1,7 @@
 const { expect } = require("chai");
 const { ethers, upgrades } = require("hardhat");
 const { mineUpTo, mine, time } = require("@nomicfoundation/hardhat-network-helpers");
+const { BigNumber } = require("moralis/common-core");
 
 describe("TMAIStaking", function () {
   let staking;
@@ -10,22 +11,25 @@ describe("TMAIStaking", function () {
   let addr1;
   let addr2;
   let addr3;
+  let addr4;
+  let addr5;
+  let addr6;
   let uniswapUtility;
 
-  const REWARD_AMOUNT = ethers.parseUnits("1000000", 18);
+  const SUPPLY = ethers.parseUnits("100000000", 18);
   const START_BLOCK = 100;
   const BONUS_END_BLOCK = 200;
-  const TOTAL_REWARDS = ethers.parseUnits("100000", 18);
+  const TOTAL_REWARDS = ethers.parseUnits("10000000", 18);
 
   describe("Deployment", function () {
 
     it("Should get signers", async function () {
-      [owner, addr1, addr2, addr3] = await ethers.getSigners();
+      [owner, addr1, addr2, addr3, addr4, addr5, addr6] = await ethers.getSigners();
     });
 
     it("Should deploy mock contracts", async function () {
       const Token = await ethers.getContractFactory("ERC20Mock");
-      token = await Token.deploy("Test Token", "TT", REWARD_AMOUNT);
+      token = await Token.deploy("Test Token", "TT", SUPPLY);
       await token.waitForDeployment();
 
       const ERC721Mock = await ethers.getContractFactory("ERC721Mock");
@@ -268,6 +272,84 @@ describe("TMAIStaking", function () {
     // });
   });
 
+  describe("APR Limiter Functionality", function () {
+
+    const SECONDS_IN_MONTH = 60 * 60 * 24 * 30 * 1;
+
+    it("Should calculate capped rewards correctly for Level 0 user", async function () {
+      await token.transfer(addr4.address, ethers.parseUnits("1000", 18));
+      await token.connect(addr4).approve(await staking.getAddress(), ethers.parseUnits("1000", 18));
+      await staking.connect(addr4).deposit(ethers.parseUnits("1000", 18), 0, false);
+
+      await time.increase(SECONDS_IN_MONTH);
+
+      const userLevel = await staking.getLevelForUser(addr4.address);
+      expect(userLevel).to.equal(0);  // Level 0
+
+      const pendingReward = await staking.pendingReward(addr4.address);
+      console.log("Pending Reward: ", pendingReward);
+
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const expectedCappedReward = BigInt(ethers.parseUnits("1000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      expect(pendingReward).to.be.lessThanOrEqual(expectedCappedReward);
+    });
+
+    it("Should calculate capped rewards correctly for Level 3 user", async function () {
+      await token.transfer(addr5.address, ethers.parseUnits("16000", 18));
+      await token.connect(addr5).approve(await staking.getAddress(), ethers.parseUnits("16000", 18));
+      await staking.connect(addr5).deposit(ethers.parseUnits("16000", 18), 0, false);
+
+      await time.increase(SECONDS_IN_MONTH * 6);
+
+      const userLevel = await staking.getLevelForUser(addr5.address);
+      expect(userLevel).to.equal(3);  // Level 3
+
+      const pendingReward = await staking.pendingReward(addr5.address);
+      console.log("Pending Reward: ", pendingReward);
+
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const expectedCappedReward = BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      expect(pendingReward).to.be.lessThanOrEqual(expectedCappedReward);
+    });
+
+    it("Should calculate capped rewards correctly for Level 3 user - at a very later time", async function () {
+
+      await time.increase(SECONDS_IN_MONTH * 12);
+
+      const userLevel = await staking.getLevelForUser(addr5.address);
+      expect(userLevel).to.equal(4);  // Level 4
+
+      const pendingReward = await staking.pendingReward(addr5.address);
+      console.log("Pending Reward: ", pendingReward);
+
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const expectedCappedReward = BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      expect(pendingReward).to.be.lessThanOrEqual(expectedCappedReward);
+    });
+
+    it("Should ensure capped rewards are applied when claiming", async function () {
+
+      const pendingReward = await staking.pendingReward(addr5.address);
+      console.log("Pending Reward: ", pendingReward);
+
+    
+      await staking.connect(addr5).claimReward();
+
+      const userLevel = await staking.getLevelForUser(addr5.address);
+      const aprLimiter = await staking.aprLimiters(userLevel);
+      const expectedCappedReward =  BigInt(ethers.parseUnits("16000", 18)) * BigInt(aprLimiter) / BigInt(100);
+
+      // log token balance
+      console.log("Token Balance: ", await token.balanceOf(addr5.address));
+      expect(await token.balanceOf(addr5.address)).to.equal(expectedCappedReward);
+    });
+
+  });
+
+  
   describe("Emergency Withdrawals", function () {
     it("Should allow the owner to perform emergency withdrawal", async function () {
       const balanceBefore = await token.balanceOf(owner.address);

@@ -319,7 +319,9 @@ contract TMAIStakingMock is
 
         uint256 accTokenPerShare = getUpdatedAccTokenPerShare();
 
-        uint256 multiplier = getStakingMultiplier(_user);
+        Level userLevel = getLevelForUser(msg.sender);
+        uint256 multiplier = levelMultipliers[userLevel];
+
         uint256 pending = unClaimedReward[_user]
             .add(
                 user.amount.mul(accTokenPerShare).div(1e12).sub(user.rewardDebt)
@@ -327,7 +329,7 @@ contract TMAIStakingMock is
             .mul(multiplier)
             .div(1000);
 
-        return calculateCappedRewards(_user, pending);
+        return calculateCappedRewards(_user, userLevel, pending);
     }
 
     function massUpdatePools() public {
@@ -539,7 +541,10 @@ contract TMAIStakingMock is
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 multiplier = getStakingMultiplier(msg.sender);
+
+        Level userLevel = getLevelForUser(msg.sender);
+        uint256 multiplier = levelMultipliers[userLevel];
+
         uint256 pending = unClaimedReward[msg.sender]
             .add(
                 user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
@@ -548,7 +553,8 @@ contract TMAIStakingMock is
             )
             .mul(multiplier)
             .div(1000);
-        uint256 cappedPending = calculateCappedRewards(msg.sender, pending);
+            
+        uint256 cappedPending = calculateCappedRewards(msg.sender, userLevel, pending);
         if (cappedPending > 0) {
             user.amount = user.amount.add(cappedPending);
             unClaimedReward[msg.sender] = 0;
@@ -562,7 +568,10 @@ contract TMAIStakingMock is
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 multiplier = getStakingMultiplier(msg.sender);
+        
+        Level userLevel = getLevelForUser(msg.sender);
+        uint256 multiplier = levelMultipliers[userLevel];
+        
         uint256 pending = unClaimedReward[msg.sender]
             .add(
                 user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
@@ -571,10 +580,12 @@ contract TMAIStakingMock is
             )
             .mul(multiplier)
             .div(1000);
-        if (pending > 0) {
-            safeTokenTransfer(msg.sender, pending);
+
+        uint256 cappedPending = calculateCappedRewards(msg.sender, userLevel, pending);
+        if (cappedPending > 0) {
+            safeTokenTransfer(msg.sender, cappedPending);
             unClaimedReward[msg.sender] = 0;
-            emit ClaimedReward(msg.sender, pending);
+            emit ClaimedReward(msg.sender, cappedPending);
         }
         user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
     }
@@ -771,10 +782,10 @@ contract TMAIStakingMock is
 
     function calculateCappedRewards(
         address _user,
+        Level userLevel,
         uint256 pending
     ) public view returns (uint256) {
         UserInfo storage user = userInfo[DEFAULT_POOL][_user];
-        Level userLevel = getLevelForUser(_user);
         uint256 aprLimiter = aprLimiters[userLevel];
         uint256 cappedRewards = user.amount.mul(aprLimiter).div(100);
         return pending > cappedRewards ? cappedRewards : pending;

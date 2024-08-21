@@ -573,7 +573,10 @@ contract TMAIStaking is
         updatePool();
         PoolInfo storage pool = poolInfo[DEFAULT_POOL];
         UserInfo storage user = userInfo[DEFAULT_POOL][msg.sender];
-        uint256 multiplier = getStakingMultiplier(msg.sender);
+        
+        Level userLevel = getLevelForUser(msg.sender);
+        uint256 multiplier = levelMultipliers[userLevel];
+
         uint256 pending = unClaimedReward[msg.sender]
             .add(
                 user.amount.mul(pool.accTokenPerShare).div(1e12).sub(
@@ -582,10 +585,12 @@ contract TMAIStaking is
             )
             .mul(multiplier)
             .div(1000);
-        if (pending > 0) {
-            safeTokenTransfer(msg.sender, pending);
+
+        uint256 cappedPending = calculateCappedRewards(msg.sender, userLevel, pending);
+        if (cappedPending > 0) {
+            safeTokenTransfer(msg.sender, cappedPending);
             unClaimedReward[msg.sender] = 0;
-            emit ClaimedReward(msg.sender, pending);
+            emit ClaimedReward(msg.sender, cappedPending);
         }
         user.rewardDebt = user.amount.mul(pool.accTokenPerShare).div(1e12);
     }
