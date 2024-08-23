@@ -3,10 +3,10 @@ pragma solidity 0.8.19;
 pragma experimental ABIEncoderV2;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "./interface/IChefV2.sol";
-import "./interface/ITimelock.sol";
+import "../interface/IChefV2.sol";
+import "../interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
+// import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -363,7 +363,7 @@ contract GovernorAlpha is Initializable {
 
     function setProposalDetail(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description, bool _fundametalChanges)internal returns (uint){
         // Set voting time for proposal.
-        uint startBlock = add256(ArbSys(ARBSYS_ADDRESS).arbBlockNumber(), votingDelay());
+        uint startBlock = add256(block.number, votingDelay());
         uint endBlock = add256(startBlock, votingPeriod);
         proposalCount = add256(proposalCount,1);
         Proposal storage newProposal = proposals[proposalCount];
@@ -384,7 +384,7 @@ contract GovernorAlpha is Initializable {
         newProposal.fundamentalchanges =_fundametalChanges;
 
         // Update details for proposal.
-        proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS).arbBlockNumber();
+        proposalCreatedTime[proposalCount] = block.number;
 
         latestProposalIds[newProposal.proposer] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
@@ -521,9 +521,9 @@ contract GovernorAlpha is Initializable {
         }
         else if (proposal.canceled) {
             return ProposalState.Canceled;
-        } else if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock && proposal.eta == 0) {
+        } else if (block.number <= proposal.startBlock && proposal.eta == 0) {
             return ProposalState.Pending;
-        } else if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock && proposal.eta == 0) {
+        } else if (block.number <= proposal.endBlock && proposal.eta == 0) {
             return ProposalState.Active;
         } else if ((proposal.forVotes <= proposal.againstVotes || proposal.forVotes < quorumVotes()) && proposal.eta == 0) {
             return ProposalState.Defeated;
@@ -562,9 +562,9 @@ contract GovernorAlpha is Initializable {
         uint256 percentage = 10;
         bool returnValue;
         // Check if proposal is non fundamental and block number is less than for 1 day since the proposal created.
-        if(proposal.fundamentalchanges==false && ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= oneday){
+        if(proposal.fundamentalchanges==false && block.number <= oneday){
             // Check if all conditions are matched or not.
-            if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock && proposal.againstVotes <= proposal.forVotes && proposal.forVotes >= quorumVotes()) {
+            if (block.number<= proposal.endBlock && proposal.againstVotes <= proposal.forVotes && proposal.forVotes >= quorumVotes()) {
                     // uint256 voteper= proposal.forVotes.sub(proposal.againstVotes).mul(100).div(proposal.againstVotes);
                     if(proposal.againstVotes==0){
                         returnValue = true;
@@ -655,7 +655,7 @@ contract GovernorAlpha is Initializable {
         uint256 _stakingScore;
         uint256 _currentMultiplier;
         uint256 _maxMultiplier;
-        (_amount,,,) = ChefInterface(chefAddress).userInfo(_pid,_userAddress);
+        (_amount,,,) = ChefInterface(chefAddress).userInfo(_pid, _userAddress);
         // (_stakingScore, _currentMultiplier, _maxMultiplier) = ChefInterface(chefAddress).stakingScoreAndMultiplier(_userAddress,_amount);
         _stakingScore = ChefInterface(chefAddress).calculateStakingScore(_userAddress);
         _currentMultiplier = ChefInterface(chefAddress).getStakingMultiplier(_userAddress);
