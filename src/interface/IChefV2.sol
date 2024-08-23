@@ -19,17 +19,25 @@ interface ChefInterface{
 
     function checkHighestStaker(address user) external view returns (bool);
     
-    function stakingScoreAndMultiplier(
-        address _userAddress,
-        uint256 _stakedAmount
-    )
-        external
-        view
-        returns (
-            uint256,
-            uint256,
-            uint256
-        );
+    // function stakingScoreAndMultiplier(
+    //     address _userAddress,
+    //     uint256 _stakedAmount
+    // )
+    //     external
+    //     view
+    //     returns (
+    //         uint256,
+    //         uint256,
+    //         uint256
+    //     );
+
+    function getStakingMultiplier(
+        address _user
+    ) external view returns (uint256);
+
+    function calculateStakingScore(
+        address _user
+    ) external view returns (uint256) ;
     
     function depositWithUserAddress(
         uint256 _amount,
@@ -37,7 +45,7 @@ interface ChefInterface{
         address _userAddress
     ) external;
 
-    function userInfo(uint256 _pid, address _userAddress) external view returns (uint256, uint256, uint256, uint256, uint256, bool,uint256);
+    function userInfo(uint256 _pid, address _userAddress) external view returns (uint256, uint256, bool, uint256);
 
     function distributeExitFeeShare(uint256 _amount) external;
     
