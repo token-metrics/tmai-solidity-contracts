@@ -1,7 +1,6 @@
 const { expect } = require("chai");
 const { ethers, upgrades } = require("hardhat");
-const { mineUpTo, mine, time } = require("@nomicfoundation/hardhat-network-helpers");
-const { BigNumber } = require("moralis/common-core");
+const { mineUpTo, time } = require("@nomicfoundation/hardhat-network-helpers");
 
 describe("TMAIStaking", function () {
   let staking;
