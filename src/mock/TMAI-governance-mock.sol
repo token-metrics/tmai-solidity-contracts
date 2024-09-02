@@ -188,6 +188,9 @@ contract GovernorAlpha is Initializable {
     /// @notice An event emitted when a vote has been cast on a proposal
     event VoteCast(address voter, uint proposalId, bool support, uint votes);
 
+    /// @notice An event emitted when a user changes their vote on a proposal
+    event VoteChanged(address voter, uint proposalId, bool support, uint votes);
+
     /// @notice An event emitted when a proposal has been canceled
     event ProposalCanceled(uint id);
 
@@ -625,20 +628,33 @@ contract GovernorAlpha is Initializable {
         }
         Proposal storage proposal = proposals[proposalId];
         Receipt storage receipt = proposal.receipts[voter];
-        require(receipt.hasVoted == false, "GovernorAlpha::_castVote: voter already voted");
-        // uint256 votes = TMAI.getPriorVotes(voter, proposal.startBlock);
+        // require(receipt.hasVoted == false, "GovernorAlpha::_castVote: voter already voted");
         uint256 votes = userVoteCount(0, voter);
-        if (support) {
-            proposal.forVotes = add256(proposal.forVotes, votes);
+        if(receipt.hasVoted == false) {
+            // uint256 votes = TMAI.getPriorVotes(voter, proposal.startBlock);
+            if (support) {
+                proposal.forVotes = add256(proposal.forVotes, votes);
+            } else {
+                proposal.againstVotes = add256(proposal.againstVotes, votes);
+            }
+            propoasalVoted[voter] = add256(propoasalVoted[voter],1);
+            receipt.hasVoted = true;
+            receipt.support = support;
+            receipt.votes = votes;
+            emit VoteCast(voter, proposalId, support, votes);
         } else {
-            proposal.againstVotes = add256(proposal.againstVotes, votes);
+            require(support != receipt.support, "GovernorAlpha::_castVote: voter already voted");
+            if(support) {
+                proposal.againstVotes = sub256(proposal.againstVotes, receipt.votes);
+                proposal.forVotes = add256(proposal.forVotes, votes);
+            } else {
+                proposal.forVotes = sub256(proposal.forVotes, receipt.votes);
+                proposal.againstVotes = add256(proposal.againstVotes, votes);
+            }
+            receipt.support = support;
+            receipt.votes = votes;
+            emit VoteChanged(voter, proposalId, support, votes);
         }
-        propoasalVoted[voter] = add256(propoasalVoted[voter],1);
-        receipt.hasVoted = true;
-        receipt.support = support;
-        receipt.votes = votes;
-
-        emit VoteCast(voter, proposalId, support, votes);
     }
 
     function userVoteCount(

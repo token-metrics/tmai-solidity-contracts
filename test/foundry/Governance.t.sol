@@ -183,6 +183,24 @@ contract GovernanceTest is Test {
         governance.castVote(1, true);
     }
 
+    function testVoteChange() public {
+        targets.push(address(governance));  
+        values.push(0);        
+        signatures.push("updateMinProposalTimeIntervalSec(uint256)");
+        calldatas.push(abi.encode(120));
+        description = "Description";
+        fundametalChanges = false;
+        tmai.approve(address(governance), 1000000000000000000000000000000);
+        vm.warp(block.timestamp + 1 days);
+        vm.warp(365 days);
+        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        vm.roll(3);
+        governance.castVote(1, true);
+        //vm.expectRevert(bytes("GovernorAlpha::_castVote: voter already voted"));
+        governance.castVote(1, false);
+    }
+
+    
     function testVoteFailVotingClosed() public {
         targets.push(address(governance));  
         values.push(0);        
