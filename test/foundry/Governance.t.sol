@@ -28,7 +28,6 @@ contract GovernanceTest is Test {
     string[] public signatures;
     bytes[] public calldatas;
     string public description;
-    bool public fundametalChanges;
 
 
     /// @notice Possible states that a proposal may be in
@@ -89,12 +88,11 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         //console.log(staking.getLevelForUser(address(this)));
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         assertEq(governance.proposalCount(), 1);
     }
 
@@ -105,13 +103,12 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(36 days);
-        governance.propose( targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose( targets, values, signatures, calldatas, description);
         vm.expectRevert(bytes("GovernorAlpha::propose: Only one proposal can be create in one day"));
-        governance.propose( targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose( targets, values, signatures, calldatas, description);
     }
 
     function testCreateProposeFailInfoMismatch() public {
@@ -120,12 +117,11 @@ contract GovernanceTest is Test {
         //signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         vm.expectRevert(bytes("GovernorAlpha::propose: proposal function information arity mismatch"));
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
     }
 
     function testCreateProposeFailNoAction() public {
@@ -133,7 +129,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         vm.expectRevert(bytes("GovernorAlpha::propose: must provide actions"));
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
     }
 
     function testCreateProposeFailOnlyOneActiveProposalPerUser() public {
@@ -143,14 +139,13 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose( targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose( targets, values, signatures, calldatas, description);
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(bytes("GovernorAlpha::propose: one live proposal per proposer, found an already pending proposal"));
-        governance.propose( targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose( targets, values, signatures, calldatas, description);
     }
 
         function testCreateProposeFailUserLevelLessThan4() public {
@@ -160,11 +155,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.expectRevert(bytes("User Level is less than 4"));
-        governance.propose( targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose( targets, values, signatures, calldatas, description);
     }
 
 
@@ -174,11 +168,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
     }
@@ -189,11 +182,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
         //vm.expectRevert(bytes("GovernorAlpha::_castVote: voter already voted"));
@@ -207,11 +199,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.warp(15 days);
         vm.expectRevert(bytes("GovernorAlpha::_castVote: voting is closed"));
         governance.castVote(1, true);
@@ -223,11 +214,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
         vm.expectRevert(bytes("GovernorAlpha::_castVote: voter already voted"));
@@ -240,7 +230,6 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -254,7 +243,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -280,11 +269,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);  
+        governance.propose(targets, values, signatures, calldatas, description);  
         vm.expectRevert(bytes("GovernorAlpha::queue: proposal can only be queued if it is succeeded"));
         governance.queue(1);
 
@@ -296,7 +284,6 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -310,7 +297,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -334,7 +321,6 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -348,7 +334,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -372,7 +358,6 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -386,7 +371,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -412,11 +397,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
         vm.roll(2016501);
@@ -430,7 +414,6 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -444,7 +427,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -470,11 +453,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
         vm.prank(user1);
@@ -488,11 +470,10 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         governance.castVote(1, true);
         governance.cancel(1);
@@ -505,7 +486,6 @@ contract GovernanceTest is Test {
         signatures.push("updateRevenueSharePercent(uint256)");
         calldatas.push(abi.encode(20));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -519,7 +499,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {
@@ -544,7 +524,6 @@ contract GovernanceTest is Test {
         signatures.push("updateRevenueSharePercent(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        fundametalChanges = false;
         address user = address(0);
         for( uint160 i = 1; i <= 33;i++) {
             user = address(i);
@@ -558,7 +537,7 @@ contract GovernanceTest is Test {
         } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        governance.propose(targets, values, signatures, calldatas, description, fundametalChanges);
+        governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
         for( uint160 i = 1; i <= 33;i++) {

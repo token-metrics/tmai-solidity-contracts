@@ -124,9 +124,6 @@ contract GovernorAlpha is Initializable {
         /// @notice Flag marking whether the proposal has been executed
         bool executed;
 
-        /// @notice Check is fundamenal changes
-        bool fundamentalchanges;
-
         /// @notice Receipts of ballots for the entire set of voters
         mapping (address => Receipt) receipts;
     }
@@ -331,10 +328,9 @@ contract GovernorAlpha is Initializable {
      * @param signatures Function that will be called.
      * @param calldatas Paramete that will be passed in function paramt in bytes format.
      * @param description Description about proposal.
-     * @param _fundametalChanges Check if proposal involved fundamental changes or not.
 	 * @dev Create new proposal. Her only top stakers can create proposal and Need to submit 50000000 TMAIa tokens to create proposal
      */
-    function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description, bool _fundametalChanges) public returns (uint) {
+    function propose(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description) public returns (uint) {
         // Check if entered configuration is correct or not.
         // require(timelock.getL2GovernanceContract(chain) != address(0), "GovernorAlpha::propose: Governance Contract not set for chain");
         require(targets.length <= totalTarget, "GovernorAlpha::propose: Target must be in range");
@@ -355,7 +351,7 @@ contract GovernorAlpha is Initializable {
           require(proposersLatestProposalState != ProposalState.Active, "GovernorAlpha::propose: one live proposal per proposer, found an already active proposal");
           require(proposersLatestProposalState != ProposalState.Pending, "GovernorAlpha::propose: one live proposal per proposer, found an already pending proposal");
         }
-        uint256 returnValue = setProposalDetail(targets, values, signatures, calldatas, description, _fundametalChanges);
+        uint256 returnValue = setProposalDetail(targets, values, signatures, calldatas, description);
         return returnValue;
     }
 
@@ -363,7 +359,7 @@ contract GovernorAlpha is Initializable {
 	 * @dev Internal function for creating proposal parameter details is similar to propose functions.
      */
 
-    function setProposalDetail(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description, bool _fundametalChanges)internal returns (uint){
+    function setProposalDetail(address[] memory targets, uint[] memory values, string[] memory signatures, bytes[] memory calldatas, string memory description)internal returns (uint){
         // Set voting time for proposal.
         uint startBlock = add256(ArbSys(ARBSYS_ADDRESS).arbBlockNumber(), votingDelay());
         uint endBlock = add256(startBlock, votingPeriod);
@@ -383,7 +379,7 @@ contract GovernorAlpha is Initializable {
         newProposal.againstVotes = 0;
         newProposal.canceled = false;
         newProposal.executed = false;
-        newProposal.fundamentalchanges =_fundametalChanges;
+
 
         // Update details for proposal.
         proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS).arbBlockNumber();
@@ -501,21 +497,12 @@ contract GovernorAlpha is Initializable {
         bool checkifMinGovenor;
         bool checkFastVote = checkfastvote(proposalId);
         uint256 percentage = 10;
-        // Check if proposal is fundamental or not. For both different requirment is set.
         // This is used to check if proposal passed minimum governor barrier.
-        if(proposal.fundamentalchanges){
-            percentage = 20;
-            if(votersInfo[proposalId].governors>=51){
-                checkifMinGovenor = true;
-            }else{
-                checkifMinGovenor = false;
-            }
+
+        if(votersInfo[proposalId].governors>=33){
+            checkifMinGovenor = true;
         }else{
-            if(votersInfo[proposalId].governors>=33){
-                checkifMinGovenor = true;
-            }else{
-                checkifMinGovenor = false;
-            }
+            checkifMinGovenor = false;
         }
         // Check if proposal is fast vote or not. Only for non fundamental proposal.
         if(checkFastVote && checkifMinGovenor && !isProposalQueued[proposalId]){
@@ -563,8 +550,8 @@ contract GovernorAlpha is Initializable {
         uint256 oneday = add256(proposalCreatedTime[proposalId],6500);
         uint256 percentage = 10;
         bool returnValue;
-        // Check if proposal is non fundamental and block number is less than for 1 day since the proposal created.
-        if(proposal.fundamentalchanges==false && ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= oneday){
+        // Check if block number is less than for 1 day since the proposal created.
+        if(ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= oneday){
             // Check if all conditions are matched or not.
             if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock && proposal.againstVotes <= proposal.forVotes && proposal.forVotes >= quorumVotes()) {
                     // uint256 voteper= proposal.forVotes.sub(proposal.againstVotes).mul(100).div(proposal.againstVotes);
