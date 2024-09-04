@@ -24,18 +24,22 @@ contract SignatureVerifier is Initializable {
         string section;
         string planType;
         uint256 expiryDate;
-        uint256 usdcAmount;
+        address token;
+        uint256 tokenAmount;
         uint256 validity;
     }
 
-    address public signerAddress;  // The address corresponding to the private key that signs the messages
+    address public signerAddress; // The address corresponding to the private key that signs the messages
 
     /**
         @notice Initializes the contract with the address of the signer.
         @param _signerAddress The address of the signer.
      */
     function initialize(address _signerAddress) public initializer {
-        require(_signerAddress != address(0), "Signer address cannot be zero address");
+        require(
+            _signerAddress != address(0),
+            "Signer address cannot be zero address"
+        );
         signerAddress = _signerAddress;
     }
 
@@ -44,7 +48,9 @@ contract SignatureVerifier is Initializable {
         @param _data The original encoded message.
         @return The keccak256 hash of the message.
      */
-    function getMessageHash(bytes memory _data) internal pure returns (bytes32) {
+    function getMessageHash(
+        bytes memory _data
+    ) internal pure returns (bytes32) {
         return keccak256(_data);
     }
 
@@ -53,8 +59,16 @@ contract SignatureVerifier is Initializable {
         @param _messageHash The original message hash.
         @return The Ethereum signed message hash.
      */
-    function getEthSignedMessageHash(bytes32 _messageHash) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", _messageHash));
+    function getEthSignedMessageHash(
+        bytes32 _messageHash
+    ) internal pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n32",
+                    _messageHash
+                )
+            );
     }
 
     /**
@@ -62,7 +76,9 @@ contract SignatureVerifier is Initializable {
         @param _signature The signature data containing the message, hash, and signature.
         @return The decoded message if the signature is valid.
      */
-    function verifySignature(Signature memory _signature) public view returns (EncodedMessage memory) {
+    function verifySignature(
+        Signature memory _signature
+    ) public view returns (EncodedMessage memory) {
         // Recreate the message hash from the encoded message
         require(
             getMessageHash(_signature.encodedMessage) == _signature.messageHash,
@@ -70,10 +86,14 @@ contract SignatureVerifier is Initializable {
         );
 
         // Get the Ethereum signed message hash
-        bytes32 ethSignedMessageHash = getEthSignedMessageHash(_signature.messageHash);
+        bytes32 ethSignedMessageHash = getEthSignedMessageHash(
+            _signature.messageHash
+        );
 
         // Recover the signer's address from the signature
-        address recoveredSigner = ethSignedMessageHash.recover(_signature.signature);
+        address recoveredSigner = ethSignedMessageHash.recover(
+            _signature.signature
+        );
         require(recoveredSigner == signerAddress, "Invalid signer");
 
         // Decode the message and validate its integrity
@@ -81,12 +101,32 @@ contract SignatureVerifier is Initializable {
         string memory section;
         string memory planType;
         uint256 expiryDate;
-        uint256 usdcAmount;
+        address token;
+        uint256 tokenAmount;
         uint256 validity;
 
-        // Decode the message
-        (userAddress, section, planType, expiryDate, usdcAmount, validity) = abi.decode(_signature.encodedMessage, (address, string, string, uint256, uint256, uint256));
-        EncodedMessage memory decodedMessage = EncodedMessage(userAddress, section, planType, expiryDate, usdcAmount, validity);
+        // Decode the message with token and token amount embedded
+        (
+            userAddress,
+            section,
+            planType,
+            expiryDate,
+            token,
+            tokenAmount,
+            validity
+        ) = abi.decode(
+            _signature.encodedMessage,
+            (address, string, string, uint256, address, uint256, uint256)
+        );
+        EncodedMessage memory decodedMessage = EncodedMessage(
+            userAddress,
+            section,
+            planType,
+            expiryDate,
+            token,
+            tokenAmount,
+            validity
+        );
 
         checkMessageValidity(decodedMessage);
 
@@ -94,19 +134,12 @@ contract SignatureVerifier is Initializable {
     }
 
     /**
-        @notice Modifier to verify the signature before proceeding with the function.
-        @param _signature The signature data to verify.
-     */
-    modifier verify(Signature memory _signature) {
-        verifySignature(_signature);
-        _;
-    }
-
-    /**
         @notice Checks the validity of the decoded message, ensuring it hasn't expired.
         @param _decodedMessage The decoded message to validate.
      */
-    function checkMessageValidity(EncodedMessage memory _decodedMessage) internal view {
+    function checkMessageValidity(
+        EncodedMessage memory _decodedMessage
+    ) internal view {
         require(_decodedMessage.validity >= block.number, "Message is expired");
     }
 }

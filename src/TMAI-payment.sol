@@ -17,12 +17,11 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
 
     address public treasury;
     address public dao;
-    address public stakingContract;
     uint256 public daoShare;
-    address public admin;
-    address public baseStableCoin;
     address public nftContract; // Address of the Soulbound NFT contract
     SignatureVerifier public signatureVerifier; // Address of the SignatureVerifier contract
+
+    mapping(address => bool) public allowedTokens; // Mapping to track allowed payment tokens
 
     event RevenueDistributed(
         uint256 revenue,
@@ -42,13 +41,14 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         string newPlanType,
         uint256 newExpiryDate
     );
+    event TokenEnabled(address token);
+    event TokenDisabled(address token);
 
+    // Initialize contract with required addresses
     function initialize(
         address _treasury,
         address _dao,
-        address _staking,
         uint256 _daoShare,
-        address _baseStableCoin,
         address _nftContract,
         address _signatureVerifier
     ) public initializer {
@@ -57,14 +57,6 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             "Treasury address cannot be zero address"
         );
         require(_dao != address(0), "DAO address cannot be zero address");
-        require(
-            _staking != address(0),
-            "Staking contract address cannot be zero address"
-        );
-        require(
-            _baseStableCoin != address(0),
-            "Base Stable Coin address cannot be zero address"
-        );
         require(
             _nftContract != address(0),
             "NFT contract address cannot be zero address"
@@ -78,9 +70,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         __Ownable2Step_init();
         treasury = _treasury;
         dao = _dao;
-        stakingContract = _staking;
         daoShare = _daoShare;
-        baseStableCoin = _baseStableCoin;
         nftContract = _nftContract;
         signatureVerifier = SignatureVerifier(_signatureVerifier);
     }
@@ -93,12 +83,15 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         SignatureVerifier.EncodedMessage memory message = signatureVerifier
             .verifySignature(signature);
 
-        // Process payment in USDC from the user's address provided in the message
+        // Ensure the token is allowed for payments
+        require(allowedTokens[message.token], "Token not allowed");
+
+        // Process payment in the specified token from the user's address
         require(
-            IERC20Upgradeable(baseStableCoin).transferFrom(
+            IERC20Upgradeable(message.token).transferFrom(
                 message.userAddress,
                 address(this),
-                message.usdcAmount
+                message.tokenAmount
             ),
             "Payment failed"
         );
@@ -109,7 +102,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
                 message.userAddress,
                 message.section,
                 message.planType,
-                message.expiryDate // Use the expiry date provided in the message
+                message.expiryDate
             );
             emit SubscriptionUpgraded(
                 message.userAddress,
@@ -123,7 +116,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
                 message.userAddress,
                 message.section,
                 message.planType,
-                message.expiryDate // Use the expiry date provided in the message
+                message.expiryDate
             );
             emit SubscriptionCreated(
                 message.userAddress,
@@ -134,47 +127,40 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         }
     }
 
-    function distributeRevenue() public onlyOwner {
-        uint256 revenue = IERC20Upgradeable(baseStableCoin).balanceOf(
-            address(this)
-        );
-        require(revenue > 0, "No Revenue to distribute");
+    // Distribute revenue from payments to treasury and DAO
+    function distributeRevenue(address token) public onlyOwner {
+        uint256 revenue = IERC20Upgradeable(token).balanceOf(address(this));
+        require(revenue > 0, "No revenue to distribute");
+
         uint256 daoAmount = revenue.mul(daoShare).div(10000);
         uint256 treasuryAmount = revenue.sub(daoAmount);
-        IERC20Upgradeable(baseStableCoin).safeTransfer(dao, daoAmount);
-        IERC20Upgradeable(baseStableCoin).safeTransfer(
-            treasury,
-            treasuryAmount
-        );
+
+        IERC20Upgradeable(token).safeTransfer(dao, daoAmount);
+        IERC20Upgradeable(token).safeTransfer(treasury, treasuryAmount);
+
         emit RevenueDistributed(revenue, treasuryAmount, daoAmount);
     }
 
+    // Update DAO share
     function updateDAOShare(uint256 _share) public onlyOwner {
-        require(_share <= 10000, "DAO Share cannot be greater than 10000");
+        require(_share <= 10000, "DAO share cannot be greater than 10000");
         daoShare = _share;
     }
 
-    function withdrawTokens(
-        address _tokenAddress,
-        uint256 _amount
-    ) external onlyOwner {
-        require(
-            _tokenAddress != address(0),
-            "Token address cannot be zero address"
-        );
-        require(
-            _tokenAddress != baseStableCoin,
-            "Cannot withdraw base stable coin"
-        );
-        IERC20Upgradeable(_tokenAddress).safeTransfer(msg.sender, _amount);
-        emit TokensWithdrawn(_tokenAddress, msg.sender, _amount);
+    // Withdraw tokens from the contract
+    function withdrawTokens(address token, uint256 _amount) external onlyOwner {
+        require(token != address(0), "Token address cannot be zero address");
+        IERC20Upgradeable(token).safeTransfer(msg.sender, _amount);
+        emit TokensWithdrawn(token, msg.sender, _amount);
     }
 
+    // Update DAO address
     function updateDAO(address _dao) public onlyOwner {
         require(_dao != address(0), "DAO address cannot be zero address");
         dao = _dao;
     }
 
+    // Update Treasury address
     function updateTreasury(address _treasury) public onlyOwner {
         require(
             _treasury != address(0),
@@ -192,5 +178,19 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             "Signature verifier address cannot be zero address"
         );
         signatureVerifier = SignatureVerifier(_signatureVerifier);
+    }
+
+    // Enable a token for payments
+    function enableToken(address token) external onlyOwner {
+        require(token != address(0), "Token address cannot be zero address");
+        allowedTokens[token] = true;
+        emit TokenEnabled(token);
+    }
+
+    // Disable a token for payments
+    function disableToken(address token) external onlyOwner {
+        require(token != address(0), "Token address cannot be zero address");
+        allowedTokens[token] = false;
+        emit TokenDisabled(token);
     }
 }

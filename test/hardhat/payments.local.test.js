@@ -19,7 +19,6 @@ describe("TMAIPayment", function () {
             mockUSDC = await MockERC20.deploy("Mock USDC", "mUSDC", 6);
             await mockUSDC.mint(user.address, ethers.parseUnits("10000", 6)); // Mint 10000 USDC for user
 
-
             // Deploy mock Soulbound NFT contract
             const MockNFT = await ethers.getContractFactory("TMAISoulboundNFT");
             mockNFT = await upgrades.deployProxy(MockNFT, []);
@@ -31,32 +30,21 @@ describe("TMAIPayment", function () {
             await mockSignatureVerifier.waitForDeployment();
         });
 
+        it("Should deploy TMAIPayment contract", async function () {
 
-        it("Should deploy TMAIStaking contract", async function () {
-
-            const mockStakingAddress = "0x0000000000000000000000000000000000000001"
             // Deploy the TMAIPayment contract
             const TMAIPaymentFactory = await ethers.getContractFactory("TMAIPayment");
             paymentContract = await upgrades.deployProxy(TMAIPaymentFactory, [
                 treasury.address,
                 dao.address,
-                mockStakingAddress, // Staking contract (set to mock address for testing)
-                2000, // DAO share (20%)
-                await mockUSDC.getAddress(),
+                2000,  // DAO share (20%)
                 await mockNFT.getAddress(),
                 await mockSignatureVerifier.getAddress()
             ]);
-
         });
-
-
     });
 
     describe("Check Initial Configuration", function () {
-        it("Should set the correct USDC address", async function () {
-            expect(await paymentContract.baseStableCoin()).to.equal(await mockUSDC.getAddress());
-        });
-
         it("Should set the correct owner", async function () {
             expect(await paymentContract.owner()).to.equal(owner.address);
         });
@@ -71,19 +59,32 @@ describe("TMAIPayment", function () {
         });
     });
 
+    describe("Token Management", function () {
+        it("Should allow owner to enable and disable tokens", async function () {
+            await paymentContract.enableToken(await mockUSDC.getAddress());
+            expect(await paymentContract.allowedTokens(await mockUSDC.getAddress())).to.be.true;
+
+            await paymentContract.disableToken(await mockUSDC.getAddress());
+            expect(await paymentContract.allowedTokens(await mockUSDC.getAddress())).to.be.false;
+        });
+    });
+
     describe("Process Payment and Subscription Management", function () {
         it("Should process a payment and create a new subscription", async function () {
+            // Enable USDC as a valid payment token
+            await paymentContract.enableToken(await mockUSDC.getAddress());
+
             // Create a valid signature for the payment
             const encodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                 { name: "section", type: "string" },
-                 { name: "planType", type: "string" },
-                 { name: "expiryDate", type: "uint256" },
-                 { name: "usdcAmount", type: "uint256" },
-                 { name: "validity", type: "uint256" },
-                ],
-                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
-              );
+                { name: "section", type: "string" },
+                { name: "planType", type: "string" },
+                { name: "expiryDate", type: "uint256" },
+                { name: "token", type: "address" },
+                { name: "tokenAmount", type: "uint256" },
+                { name: "validity", type: "uint256" }],
+                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+            );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
 
@@ -96,7 +97,7 @@ describe("TMAIPayment", function () {
             // Approve USDC spending
             await mockUSDC.connect(user).approve(await paymentContract.getAddress(), ethers.parseUnits("100", 6));
 
-            // // Process the payment and create the subscription
+            // Process the payment and create the subscription
             await paymentContract.connect(user).processPayment(signatureData, false);
 
             const tokenId = await mockNFT.userToTokenId(user.address, "analytics");
@@ -107,14 +108,14 @@ describe("TMAIPayment", function () {
             // First, create a subscription
             const encodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                 { name: "section", type: "string" },
-                 { name: "planType", type: "string" },
-                 { name: "expiryDate", type: "uint256" },
-                 { name: "usdcAmount", type: "uint256" },
-                 { name: "validity", type: "uint256" },
-                ],
-                [user.address, "data-api", "basic", 30 * 24 * 60 * 60, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
-              );
+                { name: "section", type: "string" },
+                { name: "planType", type: "string" },
+                { name: "expiryDate", type: "uint256" },
+                { name: "token", type: "address" },
+                { name: "tokenAmount", type: "uint256" },
+                { name: "validity", type: "uint256" }],
+                [user.address, "data-api", "basic", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+            );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
 
@@ -130,14 +131,14 @@ describe("TMAIPayment", function () {
             // Now, upgrade the subscription
             const upgradeEncodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                 { name: "section", type: "string" },
-                 { name: "planType", type: "string" },
-                 { name: "expiryDate", type: "uint256" },
-                 { name: "usdcAmount", type: "uint256" },
-                 { name: "validity", type: "uint256" },
-                ],
-                [user.address, "data-api", "premium", 60 * 24 * 60 * 60, ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10]
-              );
+                { name: "section", type: "string" },
+                { name: "planType", type: "string" },
+                { name: "expiryDate", type: "uint256" },
+                { name: "token", type: "address" },
+                { name: "tokenAmount", type: "uint256" },
+                { name: "validity", type: "uint256" }],
+                [user.address, "data-api", "premium", 60 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10]
+            );
             const upgradeMessageHash = keccak256(upgradeEncodedMessage);
             const upgradeSignature = await minter.signMessage(ethers.getBytes(upgradeMessageHash));
 
@@ -165,8 +166,7 @@ describe("TMAIPayment", function () {
             const treasuryShare = paymentContractBalance * BigInt(80) / BigInt(100);
             const daoShare = paymentContractBalance - BigInt(treasuryShare);
 
-            await expect(paymentContract.distributeRevenue()).to.emit(paymentContract, "RevenueDistributed").withArgs(paymentContractBalance, treasuryShare, daoShare);
-
+            await expect(paymentContract.distributeRevenue(await mockUSDC.getAddress())).to.emit(paymentContract, "RevenueDistributed").withArgs(paymentContractBalance, treasuryShare, daoShare);
 
             expect(await mockUSDC.balanceOf(await treasury.getAddress())).to.equal(treasuryShare);
             expect(await mockUSDC.balanceOf(await dao.getAddress())).to.equal(daoShare);
@@ -189,9 +189,18 @@ describe("TMAIPayment", function () {
 
     describe("Withdraw Functions", function () {
 
-        it("Should not allow withdrawal of the base stablecoin", async function () {
-            await expect(paymentContract.withdrawTokens(await mockUSDC.getAddress(), ethers.parseUnits("500", 6)))
-                .to.be.revertedWith("Cannot withdraw base stable coin");
+        it("Should allow owner to withdraw tokens", async function () {
+            // Deploy a mock token (non-USDC) to test the withdraw functionality
+            const MockToken = await ethers.getContractFactory("ERC20Mock");
+            const mockOtherToken = await MockToken.deploy("Mock Token", "MKT", 18);
+            await mockOtherToken.mint(await paymentContract.getAddress(), ethers.parseUnits("500", 18)); // Mint 500 MKT for paymentContract
+
+            // Withdraw the tokens to the owner
+            await expect(paymentContract.withdrawTokens(await mockOtherToken.getAddress(), ethers.parseUnits("500", 18)))
+                .to.emit(paymentContract, "TokensWithdrawn")
+                .withArgs(await mockOtherToken.getAddress(), owner.address, ethers.parseUnits("500", 18));
+
+            // expect(await mockOtherToken.balanceOf(owner.address)).to.equal(ethers.parseUnits("500", 18));
         });
 
         it("Should allow owner to update DAO and Treasury addresses", async function () {

@@ -8,12 +8,11 @@ describe("SignatureVerifier", function () {
   let addr1;
   let addr2;
 
-
   describe("Deployment", function () {
 
     it("Should get signers", async function () {
-        [owner, addr1, addr2] = await ethers.getSigners();
-      });
+      [owner, addr1, addr2] = await ethers.getSigners();
+    });
 
     it("Should deploy the SignatureVerifier contract", async function () {
       const SignatureVerifier = await ethers.getContractFactory("SignatureVerifier");
@@ -35,13 +34,13 @@ describe("SignatureVerifier", function () {
       // Encode the message using viem's encodeAbiParameters
       encodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
-         { name: "section", type: "string" },
-         { name: "planType", type: "string" },
-         { name: "expiryDate", type: "uint256" },
-         { name: "usdcAmount", type: "uint256" },
-         { name: "validity", type: "uint256" },
-        ],
-        [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+        { name: "section", type: "string" },
+        { name: "planType", type: "string" },
+        { name: "expiryDate", type: "uint256" },
+        { name: "token", type: "address" },
+        { name: "tokenAmount", type: "uint256" },
+        { name: "validity", type: "uint256" }],
+        [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
       );
 
       // Hash the encoded message
@@ -66,12 +65,11 @@ describe("SignatureVerifier", function () {
       expect(decodedMessage.section).to.equal("analytics");
       expect(decodedMessage.planType).to.equal("premium");
       expect(decodedMessage.expiryDate).to.equal(30 * 24 * 60 * 60);
-      expect(decodedMessage.usdcAmount).to.equal(ethers.parseUnits("100", 6));
+      expect(decodedMessage.tokenAmount).to.equal(ethers.parseUnits("100", 6));
     });
 
     it("Should fail verification with an incorrect signer", async function () {
-
-        // Sign the message hash
+      // Sign the message hash
       let fakeSignature = await addr1.signMessage(ethers.getBytes(messageHash));
 
       const signatureData = {
@@ -85,16 +83,16 @@ describe("SignatureVerifier", function () {
     });
 
     it("Should fail verification for an expired message", async function () {
-        let expiredEncodedMessage = encodeAbiParameters(
-            [{ name: "userAddress", type: "address" },
-             { name: "section", type: "string" },
-             { name: "planType", type: "string" },
-             { name: "expiryDate", type: "uint256" },
-             { name: "usdcAmount", type: "uint256" },
-             { name: "validity", type: "uint256" },
-            ],
-            [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() - 1]
-          );
+      let expiredEncodedMessage = encodeAbiParameters(
+        [{ name: "userAddress", type: "address" },
+        { name: "section", type: "string" },
+        { name: "planType", type: "string" },
+        { name: "expiryDate", type: "uint256" },
+        { name: "token", type: "address" },
+        { name: "tokenAmount", type: "uint256" },
+        { name: "validity", type: "uint256" }],
+        [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() - 1]
+      );
 
       const expiredMessageHash = keccak256(expiredEncodedMessage);
       const expiredSignature = await owner.signMessage(ethers.getBytes(expiredMessageHash));
