@@ -25,12 +25,12 @@ describe("SignatureVerifier", function () {
     });
   });
 
-  describe("Signature Verification", function () {
+  describe("Payment Signature Verification", function () {
     let encodedMessage;
     let messageHash;
     let signature;
 
-    it("Should create a valid signature", async function () {
+    it("Should create a valid payment signature", async function () {
       // Encode the message using viem's encodeAbiParameters
       encodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
@@ -50,15 +50,14 @@ describe("SignatureVerifier", function () {
       signature = await owner.signMessage(ethers.getBytes(messageHash));
     });
 
-
-    it("Should verify the signature successfully", async function () {
+    it("Should verify the payment signature successfully", async function () {
       const signatureData = {
         encodedMessage: encodedMessage,
         messageHash: messageHash,
         signature: signature,
       };
 
-      const decodedMessage = await signatureVerifier.verifySignature(signatureData);
+      const decodedMessage = await signatureVerifier.verifyPaymentSignature(signatureData);
 
       // Verify the decoded message content
       expect(decodedMessage.userAddress).to.equal(addr1.address);
@@ -68,7 +67,7 @@ describe("SignatureVerifier", function () {
       expect(decodedMessage.tokenAmount).to.equal(ethers.parseUnits("100", 6));
     });
 
-    it("Should fail verification with an incorrect signer", async function () {
+    it("Should fail payment verification with an incorrect signer", async function () {
       // Sign the message hash
       let fakeSignature = await addr1.signMessage(ethers.getBytes(messageHash));
 
@@ -78,11 +77,11 @@ describe("SignatureVerifier", function () {
         signature: fakeSignature,
       };
 
-      await expect(signatureVerifier.verifySignature(signatureData))
+      await expect(signatureVerifier.verifyPaymentSignature(signatureData))
         .to.be.revertedWith("Invalid signer");
     });
 
-    it("Should fail verification for an expired message", async function () {
+    it("Should fail payment verification for an expired message", async function () {
       let expiredEncodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
         { name: "section", type: "string" },
@@ -103,7 +102,87 @@ describe("SignatureVerifier", function () {
         signature: expiredSignature,
       };
 
-      await expect(signatureVerifier.verifySignature(signatureData))
+      await expect(signatureVerifier.verifyPaymentSignature(signatureData))
+        .to.be.revertedWith("Message is expired");
+    });
+  });
+
+  describe("Governance Signature Verification", function () {
+    let encodedMessage;
+    let messageHash;
+    let signature;
+
+    it("Should create a valid governance signature", async function () {
+      // Encode the governance message using viem's encodeAbiParameters
+      encodedMessage = encodeAbiParameters(
+        [{ name: "userAddress", type: "address" },
+        { name: "proposalId", type: "uint256" },
+        { name: "support", type: "bool" },
+        { name: "isGovernor", type: "bool" },
+        { name: "averageBalance", type: "uint256" },
+        { name: "validity", type: "uint256" }],
+        [addr1.address, 1, true, true, ethers.parseUnits("1000", 18), await ethers.provider.getBlockNumber() + 10]
+      );
+
+      // Hash the encoded message
+      messageHash = keccak256(encodedMessage);
+
+      // Sign the message hash
+      signature = await owner.signMessage(ethers.getBytes(messageHash));
+    });
+
+    it("Should verify the governance signature successfully", async function () {
+      const signatureData = {
+        encodedMessage: encodedMessage,
+        messageHash: messageHash,
+        signature: signature,
+      };
+
+      const decodedMessage = await signatureVerifier.verifyGovernanceSignature(signatureData);
+
+      // Verify the decoded message content
+      expect(decodedMessage.userAddress).to.equal(addr1.address);
+      expect(decodedMessage.proposalId).to.equal(1);
+      expect(decodedMessage.support).to.equal(true);
+      expect(decodedMessage.isGovernor).to.equal(true);
+      expect(decodedMessage.averageBalance).to.equal(ethers.parseUnits("1000", 18));
+    });
+
+    it("Should fail governance verification with an incorrect signer", async function () {
+      // Sign the message hash
+      let fakeSignature = await addr1.signMessage(ethers.getBytes(messageHash));
+
+      const signatureData = {
+        encodedMessage: encodedMessage,
+        messageHash: messageHash,
+        signature: fakeSignature,
+      };
+
+      await expect(signatureVerifier.verifyGovernanceSignature(signatureData))
+        .to.be.revertedWith("Invalid signer");
+    });
+
+    it("Should fail governance verification for an expired message", async function () {
+      let expiredEncodedMessage = encodeAbiParameters(
+        [{ name: "userAddress", type: "address" },
+        { name: "proposalId", type: "uint256" },
+        { name: "support", type: "bool" },
+        { name: "isGovernor", type: "bool" },
+        { name: "averageBalance", type: "uint256" },
+        { name: "validity", type: "uint256" }],
+        [addr1.address, 1, true, true, ethers.parseUnits("1000", 18), await ethers.provider.getBlockNumber() - 1]
+      );
+
+      const expiredMessageHash = keccak256(expiredEncodedMessage);
+      const expiredSignature = await owner.signMessage(ethers.getBytes(expiredMessageHash));
+
+      const signatureData = {
+        encodedMessage: expiredEncodedMessage,
+        messageHash: expiredMessageHash,
+        signature: expiredSignature,
+      };
+
+      await expect(signatureVerifier.verifyGovernanceSignature(signatureData))
         .to.be.revertedWith("Message is expired");
     });
   });

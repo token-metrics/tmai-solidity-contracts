@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 /**
     @title SignatureVerifier
     @notice This contract provides signature verification functionalities to ensure that messages are authorized.
+    It supports both governance and payment verification.
  */
 contract SignatureVerifier is Initializable {
     using ECDSA for bytes32;
@@ -18,8 +19,18 @@ contract SignatureVerifier is Initializable {
         bytes signature;
     }
 
-    // Struct to store the decoded message
-    struct EncodedMessage {
+    // Struct to store the decoded governance message
+    struct GovernanceMessage {
+        address userAddress;
+        uint256 proposalId;
+        bool support;
+        bool isGovernor;
+        uint256 averageBalance;
+        uint256 validity;
+    }
+
+    // Struct to store the decoded payment message
+    struct PaymentMessage {
         address userAddress;
         string section;
         string planType;
@@ -72,13 +83,88 @@ contract SignatureVerifier is Initializable {
     }
 
     /**
-        @notice Verifies that the signature matches the signed message.
+        @notice Verifies the governance message signature.
         @param _signature The signature data containing the message, hash, and signature.
-        @return The decoded message if the signature is valid.
+        @return The decoded GovernanceMessage struct if the signature is valid.
      */
-    function verifySignature(
+    function verifyGovernanceSignature(
         Signature memory _signature
-    ) public view returns (EncodedMessage memory) {
+    ) public view returns (GovernanceMessage memory) {
+        // Verify the message hash and signature
+        verifySigner(_signature);
+
+        // Decode and validate the governance message
+        (
+            address userAddress,
+            uint256 proposalId,
+            bool support,
+            bool isGovernor,
+            uint256 averageBalance,
+            uint256 validity
+        ) = abi.decode(
+                _signature.encodedMessage,
+                (address, uint256, bool, bool, uint256, uint256)
+            );
+
+        // Check message validity
+        checkMessageValidity(validity);
+
+        return
+            GovernanceMessage(
+                userAddress,
+                proposalId,
+                support,
+                isGovernor,
+                averageBalance,
+                validity
+            );
+    }
+
+    /**
+        @notice Verifies the payment message signature.
+        @param _signature The signature data containing the message, hash, and signature.
+        @return The decoded PaymentMessage struct if the signature is valid.
+     */
+    function verifyPaymentSignature(
+        Signature memory _signature
+    ) public view returns (PaymentMessage memory) {
+        // Verify the message hash and signature
+        verifySigner(_signature);
+
+        // Decode and validate the payment message
+        (
+            address userAddress,
+            string memory section,
+            string memory planType,
+            uint256 expiryDate,
+            address token,
+            uint256 tokenAmount,
+            uint256 validity
+        ) = abi.decode(
+                _signature.encodedMessage,
+                (address, string, string, uint256, address, uint256, uint256)
+            );
+
+        // Check message validity
+        checkMessageValidity(validity);
+
+        return
+            PaymentMessage(
+                userAddress,
+                section,
+                planType,
+                expiryDate,
+                token,
+                tokenAmount,
+                validity
+            );
+    }
+
+    /**
+        @notice Verifies the signer of the message by recovering the signer's address from the signature.
+        @param _signature The signature data containing the message, hash, and signature.
+     */
+    function verifySigner(Signature memory _signature) internal view {
         // Recreate the message hash from the encoded message
         require(
             getMessageHash(_signature.encodedMessage) == _signature.messageHash,
@@ -95,51 +181,13 @@ contract SignatureVerifier is Initializable {
             _signature.signature
         );
         require(recoveredSigner == signerAddress, "Invalid signer");
-
-        // Decode the message and validate its integrity
-        address userAddress;
-        string memory section;
-        string memory planType;
-        uint256 expiryDate;
-        address token;
-        uint256 tokenAmount;
-        uint256 validity;
-
-        // Decode the message with token and token amount embedded
-        (
-            userAddress,
-            section,
-            planType,
-            expiryDate,
-            token,
-            tokenAmount,
-            validity
-        ) = abi.decode(
-            _signature.encodedMessage,
-            (address, string, string, uint256, address, uint256, uint256)
-        );
-        EncodedMessage memory decodedMessage = EncodedMessage(
-            userAddress,
-            section,
-            planType,
-            expiryDate,
-            token,
-            tokenAmount,
-            validity
-        );
-
-        checkMessageValidity(decodedMessage);
-
-        return decodedMessage;
     }
 
     /**
         @notice Checks the validity of the decoded message, ensuring it hasn't expired.
-        @param _decodedMessage The decoded message to validate.
+        @param _validity The block number indicating the validity of the message.
      */
-    function checkMessageValidity(
-        EncodedMessage memory _decodedMessage
-    ) internal view {
-        require(_decodedMessage.validity >= block.number, "Message is expired");
+    function checkMessageValidity(uint256 _validity) internal view {
+        require(_validity >= block.number, "Message is expired");
     }
 }
