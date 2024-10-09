@@ -80,8 +80,8 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         SignatureVerifier.Signature memory signature,
         bool isUpgrade
     ) external {
-        SignatureVerifier.EncodedMessage memory message = signatureVerifier
-            .verifySignature(signature);
+        SignatureVerifier.PaymentMessage memory message = signatureVerifier
+            .verifyPaymentSignature(signature);
 
         // Ensure the token is allowed for payments
         require(allowedTokens[message.token], "Token not allowed");
