@@ -23,9 +23,9 @@ contract SignatureVerifier is Initializable {
     struct GovernanceMessage {
         address userAddress;
         uint256 proposalId;
-        bool support;
-        bool isGovernor;
         uint256 averageBalance;
+        bool support;
+        uint256 totalTokenHolders;
         uint256 validity;
     }
 
@@ -97,13 +97,13 @@ contract SignatureVerifier is Initializable {
         (
             address userAddress,
             uint256 proposalId,
-            bool support,
-            bool isGovernor,
             uint256 averageBalance,
+            bool support,
+            uint256 totalTokenHolders,
             uint256 validity
         ) = abi.decode(
                 _signature.encodedMessage,
-                (address, uint256, bool, bool, uint256, uint256)
+                (address, uint256, uint256, bool, uint256, uint256)
             );
 
         // Check message validity
@@ -113,9 +113,9 @@ contract SignatureVerifier is Initializable {
             GovernanceMessage(
                 userAddress,
                 proposalId,
-                support,
-                isGovernor,
                 averageBalance,
+                support,
+                totalTokenHolders,
                 validity
             );
     }

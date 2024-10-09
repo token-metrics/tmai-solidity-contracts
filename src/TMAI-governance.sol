@@ -5,140 +5,72 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./utils/SignatureVerifier.sol";
 
+/**
+ * @title Token Metrics Governor Alpha
+ * @dev This contract allows the community to create proposals and vote on them to govern the system. Proposals require a minimum TMAI holding to be created, and votes determine the outcome based on quorum and majority thresholds.
+ */
 contract GovernorAlpha is Initializable {
     using SafeMathUpgradeable for uint256;
     using SafeERC20 for IERC20;
 
-    /// The name of this contract
+    /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
 
+    /// @notice Precompile address for Arbitrum's ArbSys contract
     address public constant ARBSYS_ADDRESS =
         0x0000000000000000000000000000000000000064;
 
-    uint256 private quorumVote;
-
-    uint256 private minVoterCount;
-
-    /// The duration of voting on a proposal, in blocks
     uint256 public votingPeriod; // ~7 days in blocks
+    uint256 public blocksPerDay; // Number of blocks per day
+    uint256 public votingDelay; // Delay before voting starts
+    uint256 public minProposalTimeIntervalSec; // Minimum time interval for new proposals
+    uint256 public lastProposalTimeIntervalSec; // Last proposal time
+    uint256 public lastProposal; // Last proposal ID
+    uint256 public minProposalTMAIHolding; // Minimum TMAI holdings required to create a proposal
+    uint256 public quorumPercentage; // Minimum percentage of token holders required to vote (e.g. 25%)
+    uint256 public yesVoteThresholdPercentage; // YES votes must exceed NO votes by at least this percentage (e.g. 10%)
+    uint256 public revenueSharePercent; // Percentage of revenue for distribution
+    uint256 public buybackAndBurnPercent; // Percentage of revenue for buyback and burn
 
-    // Number of blocks per day
-    uint256 public blocksPerDay;
+    address public admin; // Admin address
+    address public baseStableCoin; // Stablecoin for revenue distribution
 
-    // Minimum time interval for proposal
-    uint256 public minProposalTimeIntervalSec;
-
-    // Last proposal time interval
-    uint256 public lastProposalTimeIntervalSec;
-
-    // Last proposal id
-    uint256 public lastProposal;
-
-    address public admin;
-
-    address public baseStableCoin;
-
-    /// @notice The number of votes in support of a proposal required in order for a quorum to be reached and for a vote to succeed
-    function quorumVotes() public view returns (uint256) {
-        return quorumVote;
-    }
-
-    /// @notice The maximum number of actions that can be included in a proposal
-    function proposalMaxOperations() public pure returns (uint256) {
-        return 10;
-    } // 10 actions
-
-    /// @notice The delay before voting on a proposal may take place, once proposed
-    function votingDelay() public pure returns (uint256) {
-        return 1;
-    } // 1 block
-
-    /// @notice Minimum number of voters
-    function minVotersCount() external view returns (uint256) {
-        return minVoterCount;
-    }
-
-    /// @notice The address of the TMAI Protocol Timelock
     TimelockInterface public timelock;
-
-    /// @notice Signature Verifier
     SignatureVerifier public signatureVerifier;
-
-    /// @notice The address of the TMAI governance token
     IERC20 public TMAI;
 
-    /// @notice The total number of proposals
     uint256 public proposalCount;
-
-    /// @notice The total number of targets.
     uint256 public totalTarget;
-
-    /// @notice Percent fort revenue share
-    uint256 public revenueSharePercent;
-
-    /// @notice Percent to buyback and burn
-    uint256 public buybackAndBurnPercent;
-
-    /// @notice voter info
-    struct VoterInfo {
-        mapping(address => bool) voterAddress;
-        uint256 voterCount;
-        uint256 governors;
-    }
+    uint256 public totalTokenHolders; // Store the current number of token holders
 
     struct Proposal {
-        /// @notice Unique id for looking up a proposal
-        uint256 id;
-        /// @notice Creator of the proposal
-        address proposer;
-        /// @notice The timestamp that the proposal will be available for execution, set once the vote succeeds
-        uint256 eta;
-        /// @notice the ordered list of target addresses for calls to be made
-        address[] targets;
-        /// @notice The ordered list of values (i.e. msg.value) to be passed to the calls to be made
-        uint256[] values;
-        /// @notice The ordered list of function signatures to be called
-        string[] signatures;
-        /// @notice The ordered list of calldata to be passed to each call
-        bytes[] calldatas;
-        /// @notice The block at which voting begins: holders must delegate their votes prior to this block
-        uint256 startBlock;
-        /// @notice The block at which voting ends: votes must be cast prior to this block
-        uint256 endBlock;
-        /// @notice Current number of votes in favor of this proposal
-        uint256 forVotes;
-        /// @notice Current number of votes in opposition to this proposal
-        uint256 againstVotes;
-        /// @notice Flag marking whether the proposal has been canceled
-        bool canceled;
-        /// @notice Flag marking whether the proposal has been executed
-        bool executed;
-        /// @notice Receipts of ballots for the entire set of voters
-        mapping(address => Receipt) receipts;
+        uint256 id; // Proposal ID
+        address proposer; // Proposal creator
+        uint256 eta; // Time after which the proposal can be executed
+        address[] targets; // Target addresses
+        uint256[] values; // Values for each target
+        string[] signatures; // Function signatures to be called
+        bytes[] calldatas; // Calldata for each call
+        uint256 startBlock; // Block at which voting starts
+        uint256 endBlock; // Block at which voting ends
+        uint256 forVotes; // Number of votes in favor
+        uint256 againstVotes; // Number of votes against
+        uint256 totalVoters; // Total number of voters for the proposal
+        bool canceled; // Whether the proposal was canceled
+        bool executed; // Whether the proposal was executed
+        mapping(address => Receipt) receipts; // Receipts of ballots for voters
     }
 
-    /// @notice Track Time proposal is created.
-    mapping(uint256 => uint256) public proposalCreatedTime;
-
-    /// @notice Track total proposal user voted on.
-    mapping(address => uint256) public proposalVoted;
-
-    /// @notice Ballot receipt record for a voter
     struct Receipt {
-        /// @notice Whether or not a vote has been cast
-        bool hasVoted;
-        /// @notice Whether or not the voter supports the proposal
-        bool support;
-        /// @notice The number of votes the voter had, which were cast
-        uint256 votes;
+        bool hasVoted; // Whether the voter has cast a vote
+        bool support; // Whether the voter supports the proposal
+        uint256 votes; // Number of votes cast
     }
 
-    /// @notice Possible states that a proposal may be in
     enum ProposalState {
         Pending,
         Active,
@@ -150,18 +82,12 @@ contract GovernorAlpha is Initializable {
         Executed
     }
 
-    /// @notice The record of all voters with proposal id
-    mapping(uint256 => VoterInfo) public votersInfo;
-
-    /// @notice The record of all proposals ever proposed
     mapping(uint256 => Proposal) public proposals;
-
-    /// @notice The latest proposal for each proposer
     mapping(address => uint256) public latestProposalIds;
-
+    mapping(uint256 => uint256) public proposalCreatedTime;
     mapping(uint256 => bool) public isProposalQueued;
 
-    /// @notice An event emitted when a new proposal is created
+    /// @notice Events for key governance actions
     event ProposalCreated(
         uint256 id,
         address proposer,
@@ -173,33 +99,21 @@ contract GovernorAlpha is Initializable {
         uint256 endBlock,
         string description
     );
-
-    /// @notice An event emitted when a vote has been cast on a proposal
     event VoteCast(
         address voter,
         uint256 proposalId,
         bool support,
         uint256 votes
     );
-
-    /// @notice An event emitted when a user changes their vote on a proposal
     event VoteChanged(
         address voter,
         uint256 proposalId,
         bool support,
         uint256 votes
     );
-
-    /// @notice An event emitted when a proposal has been canceled
     event ProposalCanceled(uint256 id);
-
-    /// @notice An event emitted when a proposal has been queued in the Timelock
     event ProposalQueued(uint256 id, uint256 eta);
-
-    /// @notice An event emitted when a proposal has been executed in the Timelock
     event ProposalExecuted(uint256 id);
-
-    /// @notice An event emitted when a revenue is distributed for Revenue Share and Buyback and Burn
     event RevenueDistributed(
         uint256 revenue,
         address buybackAndBurnReceiver,
@@ -207,41 +121,55 @@ contract GovernorAlpha is Initializable {
         address revenueShareReceiver,
         uint256 revenueShareAmount
     );
-    
 
+    /**
+     * @notice Initialize the contract with necessary parameters
+     * @param timelock_ The timelock contract address
+     * @param TMAI_ The governance token address
+     * @param _baseStableCoin The stablecoin address for revenue distribution
+     * @param _signatureVerifier The signature verifier contract
+     * @param _quorumPercentage The quorum percentage for voting
+     * @param _yesVoteThresholdPercentage The threshold for YES votes to pass a proposal
+     */
     function initialize(
         address timelock_,
         address TMAI_,
         address _baseStableCoin,
-        address _signatureVerifier
+        address _signatureVerifier,
+        uint256 _quorumPercentage,
+        uint256 _yesVoteThresholdPercentage
     ) external initializer {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
         timelock = TimelockInterface(timelock_);
         TMAI = IERC20(TMAI_);
-        quorumVote = 40e18;
-        minVoterCount = 1;
+        minProposalTMAIHolding = 50000000e18;
         minProposalTimeIntervalSec = 1 days;
+        votingDelay = 1;
         totalTarget = 3;
         votingPeriod = 2016000; // ~7 days in blocks, assuming 0.3s block time on Arbitrum
         blocksPerDay = 288000; // Assuming 0.3s block time on Arbitrum
         revenueSharePercent = 50;
         buybackAndBurnPercent = 50;
+        quorumPercentage = _quorumPercentage;
+        yesVoteThresholdPercentage = _yesVoteThresholdPercentage;
         admin = msg.sender;
         baseStableCoin = _baseStableCoin;
         signatureVerifier = SignatureVerifier(_signatureVerifier);
     }
+
     /**
      * @notice Update Quorum Value
-     * @param _quorumValue New quorum Value.
+     * @param _quorumPercentage New quorum Value.
      * @dev Update Quorum Votes
      */
-    function updateQuorumValue(uint256 _quorumValue) external {
+    function updateQuorumValue(uint256 _quorumPercentage) external {
         require(
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        quorumVote = _quorumValue;
+        require(quorumPercentage <= 100, "Invalid quorum percentage");
+        quorumPercentage = _quorumPercentage;
     }
 
     /**
@@ -265,20 +193,6 @@ contract GovernorAlpha is Initializable {
             "Call must come from Timelock."
         );
         votingPeriod = _votingPeriod;
-    }
-
-    /**
-     * @notice Update Min Voter Value
-     * @param _minVotersValue New minimum Votes Value.
-     * @dev Update nummber of minimum voters
-     */
-
-    function updateMinVotersValue(uint256 _minVotersValue) external {
-        require(
-            msg.sender == address(timelock),
-            "Call must come from Timelock."
-        );
-        minVoterCount = _minVotersValue;
     }
 
     /**
@@ -349,6 +263,7 @@ contract GovernorAlpha is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
+        require(_totalTarget <= 10, "Target count too high");
         totalTarget = _totalTarget;
     }
 
@@ -357,13 +272,13 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @notice Create a new Proposal
-     * @param targets Target contract whose functions will be called.
-     * @param values Amount of ether required for function calling.
-     * @param signatures Function that will be called.
-     * @param calldatas Paramete that will be passed in function paramt in bytes format.
-     * @param description Description about proposal.
-     * @dev Create new proposal. Her only top stakers can create proposal and Need to submit 50000000 TMAIa tokens to create proposal
+     * @notice Create a new proposal
+     * @param targets Target addresses
+     * @param values Values (ether) to send
+     * @param signatures Function signatures to call
+     * @param calldatas Parameters in calldata
+     * @param description Description of the proposal
+     * @return The ID of the newly created proposal
      */
     function propose(
         address[] memory targets,
@@ -372,53 +287,38 @@ contract GovernorAlpha is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) public returns (uint256) {
-        // Check if entered configuration is correct or not.
-        // require(timelock.getL2GovernanceContract(chain) != address(0), "GovernorAlpha::propose: Governance Contract not set for chain");
         require(
-            targets.length <= totalTarget,
-            "GovernorAlpha::propose: Target must be in range"
+            TMAI.balanceOf(msg.sender) >= minProposalTMAIHolding,
+            "Insufficient TMAI holdings"
         );
         require(
             targets.length == values.length &&
                 targets.length == signatures.length &&
                 targets.length == calldatas.length,
-            "GovernorAlpha::propose: proposal function information arity mismatch"
+            "Invalid input lengths"
         );
-        require(
-            targets.length != 0,
-            "GovernorAlpha::propose: must provide actions"
-        );
-        require(
-            targets.length <= proposalMaxOperations(),
-            "GovernorAlpha::propose: too many actions"
-        );
+        require(targets.length != 0, "Must provide actions");
+        require(targets.length <= totalTarget, "Too many actions");
 
-        // @Todo: Check User for eligibility to create proposal
-
-        // Check the minimum proposal that can be created in a single day.
         uint256 timeSinceLastProposal = block.timestamp -
             lastProposalTimeIntervalSec;
-
         require(
             timeSinceLastProposal >= minProposalTimeIntervalSec,
-            "GovernorAlpha::propose: Only one proposal can be created in one day"
+            "Proposal too soon"
         );
 
-        // Check if caller has active proposal or not. If so previous proposal must be accepted or failed first.
         uint256 latestProposalId = latestProposalIds[msg.sender];
         if (latestProposalId != 0) {
             ProposalState proposersLatestProposalState = state(
                 latestProposalId
             );
             require(
-                proposersLatestProposalState != ProposalState.Active,
-                "GovernorAlpha::propose: one live proposal per proposer, found an already active proposal"
-            );
-            require(
-                proposersLatestProposalState != ProposalState.Pending,
-                "GovernorAlpha::propose: one live proposal per proposer, found an already pending proposal"
+                proposersLatestProposalState != ProposalState.Active &&
+                    proposersLatestProposalState != ProposalState.Pending,
+                "Active or pending proposal exists"
             );
         }
+
         uint256 proposalId = setProposalDetail(
             targets,
             values,
@@ -430,9 +330,8 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @dev Internal function for creating proposal parameter details is similar to propose functions.
+     * @dev Internal function to set proposal details
      */
-
     function setProposalDetail(
         address[] memory targets,
         uint256[] memory values,
@@ -440,34 +339,24 @@ contract GovernorAlpha is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) internal returns (uint256) {
-        // Set voting time for proposal.
         uint256 startBlock = ArbSys(ARBSYS_ADDRESS).arbBlockNumber() +
-            votingDelay();
+            votingDelay;
         uint256 endBlock = startBlock + votingPeriod;
 
         proposalCount++;
-
         Proposal storage newProposal = proposals[proposalCount];
-
         newProposal.id = proposalCount;
         newProposal.proposer = msg.sender;
-        newProposal.eta = 0;
+        newProposal.startBlock = startBlock;
+        newProposal.endBlock = endBlock;
         newProposal.targets = targets;
         newProposal.values = values;
         newProposal.signatures = signatures;
         newProposal.calldatas = calldatas;
-        newProposal.startBlock = startBlock;
-        newProposal.endBlock = endBlock;
-        newProposal.forVotes = 0;
-        newProposal.againstVotes = 0;
-        newProposal.canceled = false;
-        newProposal.executed = false;
 
-        // Update details for proposal.
         proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS)
             .arbBlockNumber();
-
-        latestProposalIds[newProposal.proposer] = newProposal.id;
+        latestProposalIds[msg.sender] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
 
         emit ProposalCreated(
@@ -485,19 +374,13 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @notice Queue your proposal.
-     * @param proposalId Proposal Id.
-     * @dev Once proposal is accepted put them in queue over timelock. Proposal can only be put in queue if it is succeeded and crossed minimum voter.
+     * @notice Queue a proposal that has passed
+     * @param proposalId The ID of the proposal to queue
      */
-
     function queue(uint256 proposalId) external {
         require(
             state(proposalId) == ProposalState.Succeeded,
-            "GovernorAlpha::queue: proposal can only be queued if it is succeeded"
-        );
-        require(
-            votersInfo[proposalId].voterCount >= minVoterCount,
-            "GovernorAlpha::queue: proposal require atleast min governers quorum"
+            "Proposal not succeeded"
         );
         Proposal storage proposal = proposals[proposalId];
         uint256 eta = block.timestamp + timelock.delay();
@@ -517,9 +400,8 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @dev Internal function called by queue to check if proposal can be queued or not.
+     * @dev Internal function to queue or revert proposal
      */
-
     function _queueOrRevert(
         address target,
         uint256 value,
@@ -531,21 +413,19 @@ contract GovernorAlpha is Initializable {
             !timelock.queuedTransactions(
                 keccak256(abi.encode(target, value, signature, data, eta))
             ),
-            "GovernorAlpha::_queueOrRevert: proposal action already queued at eta"
+            "Action already queued"
         );
         timelock.queueTransaction(target, value, signature, data, eta);
     }
 
     /**
-     * @notice Execute your proposal.
-     * @param proposalId Proposal Id.
-     * @dev Once queue time is over you can execute proposal fucntion from here.
+     * @notice Execute a proposal after it is queued
+     * @param proposalId The ID of the proposal to execute
      */
-
     function execute(uint256 proposalId) external payable {
         require(
             state(proposalId) == ProposalState.Queued,
-            "GovernorAlpha::execute: proposal can only be executed if it is queued"
+            "Proposal not queued"
         );
         Proposal storage proposal = proposals[proposalId];
         proposal.executed = true;
@@ -563,24 +443,15 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @notice Cancel your proposal.
-     * @param proposalId Proposal Id.
-     * @dev If proposal is not executed you can cancel that proposal from here.
+     * @notice Cancel a proposal
+     * @param proposalId The ID of the proposal to cancel
      */
-
     function cancel(uint256 proposalId) external {
         ProposalState _state = state(proposalId);
-        require(
-            _state != ProposalState.Executed,
-            "GovernorAlpha::cancel: cannot cancel executed proposal"
-        );
+        require(_state != ProposalState.Executed, "Proposal already executed");
 
         Proposal storage proposal = proposals[proposalId];
-
-        require(
-            msg.sender == proposal.proposer,
-            "GovernorAlpha::cancel: Only creator can cancel"
-        );
+        require(msg.sender == proposal.proposer, "Only proposer can cancel");
 
         proposal.canceled = true;
         for (uint256 i = 0; i < proposal.targets.length; i++) {
@@ -636,14 +507,8 @@ contract GovernorAlpha is Initializable {
      * @notice Update the signature verifier contract address. Only the admin can call this.
      */
     function updateSignatureVerifier(address _signatureVerifier) external {
-        require(
-            msg.sender == admin,
-            "GovernorAlpha::updateSignatureVerifier: Call must come from admin."
-        );
-        require(
-            _signatureVerifier != address(0),
-            "GovernorAlpha::updateSignatureVerifier: Zero Address."
-        );
+        require(msg.sender == admin, "Call must come from admin.");
+        require(_signatureVerifier != address(0), "Zero Address.");
         signatureVerifier = SignatureVerifier(_signatureVerifier);
     }
 
@@ -659,128 +524,79 @@ contract GovernorAlpha is Initializable {
     ) external view returns (bool) {
         return proposals[proposalId].receipts[_voter].hasVoted;
     }
-    /**
-     * @notice Get state of proposal
-     * @param proposalId Proposal Id.
-     * @dev Check the status of proposal
-     */
 
+    /**
+     * @notice Get the state of a proposal
+     * @param proposalId The ID of the proposal
+     * @return The current state of the proposal
+     */
     function state(uint256 proposalId) public view returns (ProposalState) {
         require(
             proposalCount >= proposalId && proposalId > 0,
-            "GovernorAlpha::state: invalid proposal id"
+            "Invalid proposal ID"
         );
-
         Proposal storage proposal = proposals[proposalId];
 
-        bool checkifMinGovenor = votersInfo[proposalId].governors >= 33;
-        bool checkFastVote = checkfastvote(proposalId);
+        uint256 requiredQuorum = quorumVotes();
+        uint256 requiredYesPercentage = proposal
+            .againstVotes
+            .mul(yesVoteThresholdPercentage)
+            .div(100);
 
-        uint256 percentage = 10;
-
-        if (
-            checkFastVote && checkifMinGovenor && !isProposalQueued[proposalId]
-        ) {
-            return ProposalState.Succeeded;
-        }
         if (proposal.canceled) {
             return ProposalState.Canceled;
         }
-        if (
-            ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock &&
-            proposal.eta == 0
-        ) {
+        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock) {
             return ProposalState.Pending;
         }
-        if (
-            ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock &&
-            proposal.eta == 0
-        ) {
+        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock) {
             return ProposalState.Active;
         }
+        if (proposal.totalVoters < requiredQuorum) {
+            return ProposalState.Defeated;
+        }
         if (
-            (proposal.forVotes <= proposal.againstVotes ||
-                proposal.forVotes < quorumVotes()) && proposal.eta == 0
+            proposal.forVotes <
+            proposal.againstVotes.add(requiredYesPercentage)
         ) {
             return ProposalState.Defeated;
         }
-        if (proposal.eta == 0) {
-            if (checkifMinGovenor) {
-                if (proposal.againstVotes == 0) {
-                    return ProposalState.Succeeded;
-                }
-                uint256 votePercentage = ((proposal.forVotes -
-                    proposal.againstVotes) * 100) / proposal.againstVotes;
-                if (votePercentage > percentage) {
-                    return ProposalState.Succeeded;
-                }
-            }
-            return ProposalState.Defeated;
-        }
-        if (proposal.executed) {
-            return ProposalState.Executed;
+        if (
+            proposal.eta == 0 &&
+            block.timestamp >= proposalCreatedTime[proposalId] + 1 days
+        ) {
+            return ProposalState.Succeeded;
         }
         if (block.timestamp >= proposal.eta + timelock.GRACE_PERIOD()) {
             return ProposalState.Expired;
         }
-
         return ProposalState.Queued;
     }
 
     /**
-     * @notice Get fast vote state of proposal
-     * @param proposalId Proposal Id.
-     * @dev Check the fast vote status of proposal
+     * @dev Calculate the minimum number of votes required to reach quorum
+     * @return The number of votes required to reach quorum
      */
-
-    function checkfastvote(uint256 proposalId) public view returns (bool) {
-        require(
-            proposalCount >= proposalId && proposalId > 0,
-            "GovernorAlpha::state: invalid proposal id"
-        );
-
-        Proposal storage proposal = proposals[proposalId];
-        uint256 oneDayBlockLimit = proposalCreatedTime[proposalId] +
-            blocksPerDay;
-        uint256 percentageThreshold = 10;
-
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= oneDayBlockLimit) {
-            if (
-                ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock &&
-                proposal.againstVotes <= proposal.forVotes &&
-                proposal.forVotes >= quorumVotes()
-            ) {
-                if (proposal.againstVotes == 0) {
-                    return true;
-                }
-
-                uint256 votePercentage = ((proposal.forVotes -
-                    proposal.againstVotes) * 100) / proposal.againstVotes;
-                if (votePercentage > percentageThreshold) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
+    function quorumVotes() public view returns (uint256) {
+        return totalTokenHolders.mul(quorumPercentage).div(100);
     }
 
     /**
      * @notice Cast a vote for a proposal
      * @param signature The signature of the voter
-     * @dev Cast a vote for a proposal
+     * @dev Cast a vote for a proposal and update total token holders accordingly
      */
-    function castVote(
-        SignatureVerifier.Signature memory signature
-    ) external {
-        SignatureVerifier.GovernanceMessage
-            memory message = signatureVerifier.verifyGovernanceSignature(signature);
+    function castVote(SignatureVerifier.Signature memory signature) external {
+        SignatureVerifier.GovernanceMessage memory message = signatureVerifier
+            .verifyGovernanceSignature(signature);
+
+        // Before casting vote, update total token holders
+        totalTokenHolders = message.totalTokenHolders;
 
         _castVote(
             message.userAddress,
             message.proposalId,
             message.support,
-            message.isGovernor,
             message.averageBalance
         );
     }
@@ -789,7 +605,6 @@ contract GovernorAlpha is Initializable {
      * @notice Cast a vote for a proposal
      * @param proposalId The ID of the proposal
      * @param support The support value of the vote
-     * @param isGovernor The status of the voter
      * @param averageBalance The average balance of the voter
      * @dev Cast a vote for a proposal
      */
@@ -797,23 +612,12 @@ contract GovernorAlpha is Initializable {
         address voter,
         uint256 proposalId,
         bool support,
-        bool isGovernor,
         uint256 averageBalance
     ) internal {
         require(
             state(proposalId) == ProposalState.Active,
             "GovernorAlpha::_castVote: voting is closed"
         );
-
-        // Mark the voter and update count if not already done
-        VoterInfo storage voterInfo = votersInfo[proposalId];
-        if (!voterInfo.voterAddress[voter]) {
-            voterInfo.voterAddress[voter] = true;
-            voterInfo.voterCount++;
-            if (isGovernor) {
-                voterInfo.governors++;
-            }
-        }
 
         Proposal storage proposal = proposals[proposalId];
         Receipt storage receipt = proposal.receipts[voter];
@@ -825,7 +629,7 @@ contract GovernorAlpha is Initializable {
             } else {
                 proposal.againstVotes += averageBalance;
             }
-            proposalVoted[voter]++;
+            proposal.totalVoters++;
             receipt.hasVoted = true;
             receipt.support = support;
             receipt.votes = averageBalance;
@@ -850,17 +654,17 @@ contract GovernorAlpha is Initializable {
     }
 
     /**
-     * @dev Function to claim buyback and burn funds
-     * @param receiverBuyBackandBurn address to receive funds for buyback and burn
-     * @param receiverRevenueShare address to receive funds for revenueShare
+     * @notice Distribute revenue between buyback and burn and revenue share
+     * @param receiverBuyBackandBurn The address to receive buyback and burn funds
+     * @param receiverRevenueShare The address to receive revenue share funds
      */
     function distributeRevenue(
         address receiverBuyBackandBurn,
         address receiverRevenueShare
     ) external {
-        require(msg.sender == admin, "Call must come from Admin.");
+        require(msg.sender == admin, "Only admin can distribute revenue");
         uint256 revenue = IERC20(baseStableCoin).balanceOf(address(this));
-        require(revenue > 0, "No Revenue to distribute");
+        require(revenue > 0, "No revenue to distribute");
         uint256 buyBackandBurnAmount = revenue.mul(buybackAndBurnPercent).div(
             100
         );
