@@ -117,11 +117,11 @@ describe("SignatureVerifier", function () {
       encodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
         { name: "proposalId", type: "uint256" },
-        { name: "support", type: "bool" },
-        { name: "isGovernor", type: "bool" },
         { name: "averageBalance", type: "uint256" },
+        { name: "support", type: "bool" },
+        { name: "totalTokenHolders", type: "uint256" },
         { name: "validity", type: "uint256" }],
-        [addr1.address, 1, true, true, ethers.parseUnits("1000", 18), await ethers.provider.getBlockNumber() + 10]
+        [addr1.address, 1, ethers.parseUnits("1000", 18), true, 100, await ethers.provider.getBlockNumber() + 10]
       );
 
       // Hash the encoded message
@@ -144,8 +144,8 @@ describe("SignatureVerifier", function () {
       expect(decodedMessage.userAddress).to.equal(addr1.address);
       expect(decodedMessage.proposalId).to.equal(1);
       expect(decodedMessage.support).to.equal(true);
-      expect(decodedMessage.isGovernor).to.equal(true);
       expect(decodedMessage.averageBalance).to.equal(ethers.parseUnits("1000", 18));
+      expect(decodedMessage.totalTokenHolders).to.equal(100);
     });
 
     it("Should fail governance verification with an incorrect signer", async function () {
@@ -166,11 +166,11 @@ describe("SignatureVerifier", function () {
       let expiredEncodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
         { name: "proposalId", type: "uint256" },
-        { name: "support", type: "bool" },
-        { name: "isGovernor", type: "bool" },
         { name: "averageBalance", type: "uint256" },
+        { name: "support", type: "bool" },
+        { name: "totalTokenHolders", type: "uint256" },
         { name: "validity", type: "uint256" }],
-        [addr1.address, 1, true, true, ethers.parseUnits("1000", 18), await ethers.provider.getBlockNumber() - 1]
+        [addr1.address, 1, ethers.parseUnits("1000", 18), true, 100, await ethers.provider.getBlockNumber() - 1]
       );
 
       const expiredMessageHash = keccak256(expiredEncodedMessage);
