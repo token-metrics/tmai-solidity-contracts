@@ -4,7 +4,7 @@ pragma solidity ^0.8.2;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
+// import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../utils/SignatureVerifier.sol";
@@ -20,9 +20,9 @@ contract GovernorAlphaMock is Initializable {
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
 
-    /// @notice Precompile address for Arbitrum's ArbSys contract
-    address public constant ARBSYS_ADDRESS =
-        0x0000000000000000000000000000000000000064;
+    // /// @notice Precompile address for Arbitrum's ArbSys contract
+    // address public constant ARBSYS_ADDRESS =
+    //     0x0000000000000000000000000000000000000064;
 
     uint256 public votingPeriod; // ~7 days in blocks
     uint256 public blocksPerDay; // Number of blocks per day
@@ -339,8 +339,9 @@ contract GovernorAlphaMock is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) internal returns (uint256) {
-        uint256 startBlock = ArbSys(ARBSYS_ADDRESS).arbBlockNumber() +
-            votingDelay;
+        // uint256 startBlock = ArbSys(ARBSYS_ADDRESS).arbBlockNumber() +
+        //     votingDelay;
+        uint startBlock = block.number + votingDelay;
         uint256 endBlock = startBlock + votingPeriod;
 
         proposalCount++;
@@ -354,8 +355,9 @@ contract GovernorAlphaMock is Initializable {
         newProposal.signatures = signatures;
         newProposal.calldatas = calldatas;
 
-        proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS)
-            .arbBlockNumber();
+        // proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS)
+        //     .arbBlockNumber();
+        proposalCreatedTime[proposalCount] = block.number;
         latestProposalIds[msg.sender] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
 
@@ -525,6 +527,7 @@ contract GovernorAlphaMock is Initializable {
         return proposals[proposalId].receipts[_voter].hasVoted;
     }
 
+    
     /**
      * @notice Get the state of a proposal
      * @param proposalId The ID of the proposal
@@ -535,43 +538,59 @@ contract GovernorAlphaMock is Initializable {
             proposalCount >= proposalId && proposalId > 0,
             "Invalid proposal ID"
         );
+
         Proposal storage proposal = proposals[proposalId];
 
+        // Check if the proposal is canceled
+        if (proposal.canceled) {
+            return ProposalState.Canceled;
+        }
+
+        // Check if the proposal is already executed
+        if (proposal.executed) {
+            return ProposalState.Executed;
+        }
+
+        // Check if the proposal has not yet started
+        if (block.number <= proposal.startBlock) {
+            return ProposalState.Pending;
+        }
+
+        // Check if the proposal is still active (voting is ongoing)
+        if (block.number <= proposal.endBlock) {
+            return ProposalState.Active;
+        }
+
+        // Check if the proposal failed to meet the quorum or the YES vote threshold
         uint256 requiredQuorum = quorumVotes();
         uint256 requiredYesPercentage = proposal
             .againstVotes
             .mul(yesVoteThresholdPercentage)
             .div(100);
 
-        if (proposal.canceled) {
-            return ProposalState.Canceled;
-        }
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock) {
-            return ProposalState.Pending;
-        }
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock) {
-            return ProposalState.Active;
-        }
-        if (proposal.totalVoters < requiredQuorum) {
-            return ProposalState.Defeated;
-        }
         if (
-            proposal.forVotes <
-            proposal.againstVotes.add(requiredYesPercentage)
+            proposal.totalVoters < requiredQuorum ||
+            proposal.forVotes < proposal.againstVotes.add(requiredYesPercentage)
         ) {
             return ProposalState.Defeated;
         }
+
+        // Check if the proposal succeeded but not yet queued for execution
         if (
             proposal.eta == 0 &&
             block.timestamp >= proposalCreatedTime[proposalId] + 1 days
         ) {
             return ProposalState.Succeeded;
         }
+
+        // Check if the proposal is queued for execution
         if (block.timestamp >= proposal.eta + timelock.GRACE_PERIOD()) {
             return ProposalState.Expired;
         }
+
         return ProposalState.Queued;
     }
+
 
     /**
      * @dev Calculate the minimum number of votes required to reach quorum
