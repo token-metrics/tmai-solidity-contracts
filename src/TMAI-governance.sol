@@ -535,41 +535,56 @@ contract GovernorAlpha is Initializable {
             proposalCount >= proposalId && proposalId > 0,
             "Invalid proposal ID"
         );
+
         Proposal storage proposal = proposals[proposalId];
 
+        // Check if the proposal is canceled
+        if (proposal.canceled) {
+            return ProposalState.Canceled;
+        }
+
+        // Check if the proposal is already executed
+        if (proposal.executed) {
+            return ProposalState.Executed;
+        }
+
+        // Check if the proposal has not yet started
+        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock) {
+            return ProposalState.Pending;
+        }
+
+        // Check if the proposal is still active (voting is ongoing)
+        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock) {
+            return ProposalState.Active;
+        }
+
+        // Check if the proposal failed to meet the quorum or the YES vote threshold
         uint256 requiredQuorum = quorumVotes();
         uint256 requiredYesPercentage = proposal
             .againstVotes
             .mul(yesVoteThresholdPercentage)
             .div(100);
 
-        if (proposal.canceled) {
-            return ProposalState.Canceled;
-        }
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock) {
-            return ProposalState.Pending;
-        }
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock) {
-            return ProposalState.Active;
-        }
-        if (proposal.totalVoters < requiredQuorum) {
-            return ProposalState.Defeated;
-        }
         if (
-            proposal.forVotes <
-            proposal.againstVotes.add(requiredYesPercentage)
+            proposal.totalVoters < requiredQuorum ||
+            proposal.forVotes < proposal.againstVotes.add(requiredYesPercentage)
         ) {
             return ProposalState.Defeated;
         }
+
+        // Check if the proposal succeeded but not yet queued for execution
         if (
             proposal.eta == 0 &&
             block.timestamp >= proposalCreatedTime[proposalId] + 1 days
         ) {
             return ProposalState.Succeeded;
         }
+
+        // Check if the proposal is queued for execution
         if (block.timestamp >= proposal.eta + timelock.GRACE_PERIOD()) {
             return ProposalState.Expired;
         }
+
         return ProposalState.Queued;
     }
 
