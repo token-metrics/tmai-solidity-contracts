@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.19;
+pragma solidity ^0.8.2;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../../src/TMAI-timelock.sol";
-import "../../src/TMAI-Token.sol";
+import "../../src/TMAI-token.sol";
 import "../../src/mock/ERC20Mock.sol";
 import "../../src/mock/TMAI-governance-mock.sol";
 import "../../src/utils/SignatureVerifier.sol";
