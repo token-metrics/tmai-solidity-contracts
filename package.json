@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "TMAI Smart Contracts",
   "dependencies": {
-    "@arbitrum/nitro-contracts": "^1.2.1",
     "@nomiclabs/hardhat-etherscan": "^3.1.7",
     "@openzeppelin/contracts": "^4.9.0",
     "@openzeppelin/contracts-upgradeable": "^4.9.0",

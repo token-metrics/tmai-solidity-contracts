@@ -4,7 +4,6 @@ pragma solidity ^0.8.2;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
 import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./utils/SignatureVerifier.sol";
@@ -20,9 +19,6 @@ contract GovernorAlpha is Initializable {
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
 
-    /// @notice Precompile address for Arbitrum's ArbSys contract
-    address public constant ARBSYS_ADDRESS =
-        0x0000000000000000000000000000000000000064;
 
     uint256 public votingPeriod; // ~7 days in blocks
     uint256 public blocksPerDay; // Number of blocks per day
@@ -339,7 +335,7 @@ contract GovernorAlpha is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) internal returns (uint256) {
-        uint256 startBlock = ArbSys(ARBSYS_ADDRESS).arbBlockNumber() +
+        uint256 startBlock = block.number +
             votingDelay;
         uint256 endBlock = startBlock + votingPeriod;
 
@@ -354,8 +350,7 @@ contract GovernorAlpha is Initializable {
         newProposal.signatures = signatures;
         newProposal.calldatas = calldatas;
 
-        proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS)
-            .arbBlockNumber();
+        proposalCreatedTime[proposalCount] = block.number;
         latestProposalIds[msg.sender] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
 
@@ -549,12 +544,12 @@ contract GovernorAlpha is Initializable {
         }
 
         // Check if the proposal has not yet started
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.startBlock) {
+        if (block.number <= proposal.startBlock) {
             return ProposalState.Pending;
         }
 
         // Check if the proposal is still active (voting is ongoing)
-        if (ArbSys(ARBSYS_ADDRESS).arbBlockNumber() <= proposal.endBlock) {
+        if (block.number <= proposal.endBlock) {
             return ProposalState.Active;
         }
 
