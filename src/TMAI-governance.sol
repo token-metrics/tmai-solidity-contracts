@@ -354,7 +354,7 @@ contract GovernorAlpha is Initializable {
         newProposal.signatures = signatures;
         newProposal.calldatas = calldatas;
 
-        proposalCreatedTime[proposalCount] = block.number;
+        proposalCreatedTime[proposalCount] = block.timestamp;
         latestProposalIds[msg.sender] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
 
