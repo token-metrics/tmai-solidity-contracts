@@ -447,7 +447,7 @@ contract TMAIVesting is
         onlyIfVestingScheduleNotRevoked(vestingScheduleId)
         returns (uint256)
     {
-        VestingSchedule storage vestingSchedule = vestingSchedules[
+        VestingSchedule memory vestingSchedule = vestingSchedules[
             vestingScheduleId
         ];
         return _computeReleasableAmount(vestingSchedule);
