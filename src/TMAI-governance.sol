@@ -15,7 +15,6 @@ import "./utils/SignatureVerifier.sol";
 contract GovernorAlpha is Initializable {
     using SafeMathUpgradeable for uint256;
     using SafeERC20 for IERC20;
-
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
 
@@ -137,6 +136,9 @@ contract GovernorAlpha is Initializable {
     ) external initializer {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
+        require(quorumPercentage <= 100 && quorumPercentage > 0, "Invalid quorum percentage");
+        require(_baseStableCoin != address(0), "Zero Address");
+
         timelock = TimelockInterface(timelock_);
         TMAI = IERC20(TMAI_);
         minProposalTMAIHolding = 50000000e18;
