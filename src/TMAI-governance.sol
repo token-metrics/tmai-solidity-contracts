@@ -263,7 +263,7 @@ contract GovernorAlpha is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(_totalTarget <= 10, "Target count too high");
+        require(_totalTarget <= 10 && _totalTarget > 0, "Target count should be greater than 0 and less than or equal to 10");
         totalTarget = _totalTarget;
     }
 
