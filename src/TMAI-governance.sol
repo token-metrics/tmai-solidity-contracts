@@ -448,6 +448,7 @@ contract GovernorAlpha is Initializable {
     function cancel(uint256 proposalId) external {
         ProposalState _state = state(proposalId);
         require(_state != ProposalState.Executed, "Proposal already executed");
+        require(_state != ProposalState.Canceled, "Proposal already canceled");
 
         Proposal storage proposal = proposals[proposalId];
         require(msg.sender == proposal.proposer, "Only proposer can cancel");
