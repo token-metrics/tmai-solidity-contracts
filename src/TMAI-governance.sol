@@ -175,6 +175,7 @@ contract GovernorAlpha is Initializable {
      */
     function updateAdmin(address _admin) external {
         require(msg.sender == admin, "Call must come from Admin.");
+        require(_admin != address(0), "Zero Address");
         admin = _admin;
     }
 
