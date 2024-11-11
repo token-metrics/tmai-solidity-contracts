@@ -47,11 +47,11 @@ contract TMAIVesting is
     // address of the ERC20 token
     IERC20Upgradeable private _token;
 
-    bytes32[] private vestingSchedulesIds;
-    mapping(bytes32 => uint256) private userVestingScheduleId;
-    mapping(bytes32 => VestingSchedule) private vestingSchedules;
-    uint256 private vestingSchedulesTotalAmount;
-    mapping(address => uint256) private holdersVestingCount;
+    bytes32[] private _vestingSchedulesIds;
+    mapping(bytes32 => uint256) private _userVestingScheduleId;
+    mapping(bytes32 => VestingSchedule) private _vestingSchedules;
+    uint256 private _vestingSchedulesTotalAmount;
+    mapping(address => uint256) private _holdersVestingCount;
 
     uint256 public keeperInterval;
     uint256 public keeperLastUpdatedTime;
@@ -63,8 +63,8 @@ contract TMAIVesting is
      * @dev Reverts if the vesting schedule does not exist or has been revoked.
      */
     modifier onlyIfVestingScheduleNotRevoked(bytes32 vestingScheduleId) {
-        require(vestingSchedules[vestingScheduleId].initialized);
-        require(!vestingSchedules[vestingScheduleId].revoked);
+        require(_vestingSchedules[vestingScheduleId].initialized);
+        require(!_vestingSchedules[vestingScheduleId].revoked);
         _;
     }
 
@@ -91,7 +91,7 @@ contract TMAIVesting is
     function getVestingSchedulesCountByBeneficiary(
         address _beneficiary
     ) external view returns (uint256) {
-        return holdersVestingCount[_beneficiary];
+        return _holdersVestingCount[_beneficiary];
     }
 
     /**
@@ -105,7 +105,7 @@ contract TMAIVesting is
             index < getVestingSchedulesCount(),
             "TMAIVesting: index out of bounds"
         );
-        return vestingSchedulesIds[index];
+        return _vestingSchedulesIds[index];
     }
 
     /**
@@ -127,7 +127,7 @@ contract TMAIVesting is
      * @return the total amount of vesting schedules
      */
     function getVestingSchedulesTotalAmount() external view returns (uint256) {
-        return vestingSchedulesTotalAmount;
+        return _vestingSchedulesTotalAmount;
     }
 
     /**
@@ -245,16 +245,16 @@ contract TMAIVesting is
             block.timestamp > keeperLastUpdatedTime &&
             (block.timestamp.sub(keeperLastUpdatedTime) > keeperInterval)
         ) {
-            for (uint256 i = 0; i < vestingSchedulesIds.length; i++) {
+            for (uint256 i = 0; i < _vestingSchedulesIds.length; i++) {
                 if (
-                    vestingSchedules[vestingSchedulesIds[i]].initialized &&
-                    !vestingSchedules[vestingSchedulesIds[i]].revoked
+                    _vestingSchedules[_vestingSchedulesIds[i]].initialized &&
+                    !_vestingSchedules[_vestingSchedulesIds[i]].revoked
                 ) {
                     uint256 _releasableAmount = computeReleasableAmount(
-                        vestingSchedulesIds[i]
+                        _vestingSchedulesIds[i]
                     );
                     if (_releasableAmount > 0) {
-                        release(vestingSchedulesIds[i], _releasableAmount);
+                        release(_vestingSchedulesIds[i], _releasableAmount);
                     }
                 }
             }
@@ -308,7 +308,7 @@ contract TMAIVesting is
         );
 
         require(
-            !vestingSchedules[vestingScheduleId].initialized,
+            !_vestingSchedules[vestingScheduleId].initialized,
             "TMAIVesting: vesting schedule already exists"
         );
 
@@ -317,7 +317,7 @@ contract TMAIVesting is
 
         uint256 cliff = _start.add(_cliff);
 
-        vestingSchedules[vestingScheduleId] = VestingSchedule(
+        _vestingSchedules[vestingScheduleId] = VestingSchedule(
             true,
             _beneficiary,
             cliff,
@@ -330,13 +330,13 @@ contract TMAIVesting is
             _released,
             false
         );
-        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount
             .add(_amount)
             .sub(_released);
-        userVestingScheduleId[vestingScheduleId] = vestingSchedulesIds.length;
-        vestingSchedulesIds.push(vestingScheduleId);
-        uint256 currentVestingCount = holdersVestingCount[_beneficiary];
-        holdersVestingCount[_beneficiary] = currentVestingCount.add(1);
+        _userVestingScheduleId[vestingScheduleId] = _vestingSchedulesIds.length;
+        _vestingSchedulesIds.push(vestingScheduleId);
+        uint256 currentVestingCount = _holdersVestingCount[_beneficiary];
+        _holdersVestingCount[_beneficiary] = currentVestingCount.add(1);
 
         if (_initialRelease > 0) {
             _token.safeTransfer(_beneficiary, _initialRelease);
@@ -355,7 +355,7 @@ contract TMAIVesting is
         nonReentrant
         onlyIfVestingScheduleNotRevoked(vestingScheduleId)
     {
-        VestingSchedule storage vestingSchedule = vestingSchedules[
+        VestingSchedule storage vestingSchedule = _vestingSchedules[
             vestingScheduleId
         ];
         require(
@@ -369,18 +369,18 @@ contract TMAIVesting is
         uint256 unreleased = vestingSchedule.amountTotal.sub(
             vestingSchedule.released
         );
-        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount.sub(
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.sub(
             unreleased
         );
         vestingSchedule.revoked = true;
 
-        bytes32 element = vestingSchedulesIds[
-            vestingSchedulesIds.length.sub(1)
+        bytes32 element = _vestingSchedulesIds[
+            _vestingSchedulesIds.length.sub(1)
         ];
-        uint256 tempVestingId = userVestingScheduleId[vestingScheduleId];
-        vestingSchedulesIds[tempVestingId] = element;
-        userVestingScheduleId[element] = tempVestingId;
-        vestingSchedulesIds.pop();
+        uint256 tempVestingId = _userVestingScheduleId[vestingScheduleId];
+        _vestingSchedulesIds[tempVestingId] = element;
+        _userVestingScheduleId[element] = tempVestingId;
+        _vestingSchedulesIds.pop();
 
         emit Revoked(vestingSchedule.beneficiary, vestingScheduleId);
     }
@@ -410,7 +410,7 @@ contract TMAIVesting is
     }
 
     function _release(bytes32 vestingScheduleId, uint256 amount) internal {
-        VestingSchedule storage vestingSchedule = vestingSchedules[
+        VestingSchedule storage vestingSchedule = _vestingSchedules[
             vestingScheduleId
         ];
         uint256 vestedAmount = _computeReleasableAmount(vestingSchedule);
@@ -422,7 +422,7 @@ contract TMAIVesting is
         address payable beneficiaryPayable = payable(
             vestingSchedule.beneficiary
         );
-        vestingSchedulesTotalAmount = vestingSchedulesTotalAmount.sub(amount);
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.sub(amount);
         _token.safeTransfer(beneficiaryPayable, amount);
         emit Released(vestingSchedule.beneficiary, amount);
     }
@@ -432,7 +432,7 @@ contract TMAIVesting is
      * @return the number of vesting schedules
      */
     function getVestingSchedulesCount() public view returns (uint256) {
-        return vestingSchedulesIds.length;
+        return _vestingSchedulesIds.length;
     }
 
     /**
@@ -447,7 +447,7 @@ contract TMAIVesting is
         onlyIfVestingScheduleNotRevoked(vestingScheduleId)
         returns (uint256)
     {
-        VestingSchedule memory vestingSchedule = vestingSchedules[
+        VestingSchedule memory vestingSchedule = _vestingSchedules[
             vestingScheduleId
         ];
         return _computeReleasableAmount(vestingSchedule);
@@ -460,7 +460,7 @@ contract TMAIVesting is
     function getVestingSchedule(
         bytes32 vestingScheduleId
     ) public view returns (VestingSchedule memory) {
-        return vestingSchedules[vestingScheduleId];
+        return _vestingSchedules[vestingScheduleId];
     }
 
     /**
@@ -468,7 +468,7 @@ contract TMAIVesting is
      * @return the amount of tokens
      */
     function getWithdrawableAmount() external view returns (uint256) {
-        return _token.balanceOf(address(this)).sub(vestingSchedulesTotalAmount);
+        return _token.balanceOf(address(this)).sub(_vestingSchedulesTotalAmount);
     }
 
     /**
@@ -480,7 +480,7 @@ contract TMAIVesting is
         return
             computeVestingScheduleIdForAddressAndIndex(
                 holder,
-                holdersVestingCount[holder]
+                _holdersVestingCount[holder]
             );
     }
 
@@ -491,10 +491,10 @@ contract TMAIVesting is
         address holder
     ) external view returns (VestingSchedule memory) {
         return
-            vestingSchedules[
+            _vestingSchedules[
                 computeVestingScheduleIdForAddressAndIndex(
                     holder,
-                    holdersVestingCount[holder].sub(1)
+                    _holdersVestingCount[holder].sub(1)
                 )
             ];
     }
@@ -540,7 +540,7 @@ contract TMAIVesting is
     function viewUserVestingDetailsIndex(
         bytes32 _vestingScheduleId
     ) public view returns (uint256) {
-        return userVestingScheduleId[_vestingScheduleId];
+        return _userVestingScheduleId[_vestingScheduleId];
     }
 
     function resetRevokeIDs(
@@ -548,7 +548,7 @@ contract TMAIVesting is
         uint256[] memory _vestingIndex
     ) external onlyOwner {
         for (uint256 i = 0; i < _vestingIds.length; i++) {
-            userVestingScheduleId[_vestingIds[i]] = _vestingIndex[i];
+            _userVestingScheduleId[_vestingIds[i]] = _vestingIndex[i];
         }
     }
 }
