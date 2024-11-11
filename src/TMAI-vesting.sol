@@ -7,7 +7,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "./interface/KeeperCompatible.sol";
 
 /**
  * @title TMAIVesting
@@ -15,8 +14,7 @@ import "./interface/KeeperCompatible.sol";
 contract TMAIVesting is
     Initializable,
     Ownable2StepUpgradeable,
-    ReentrancyGuardUpgradeable,
-    KeeperCompatibleInterface
+    ReentrancyGuardUpgradeable
 {
     using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -53,9 +51,6 @@ contract TMAIVesting is
     uint256 private _vestingSchedulesTotalAmount;
     mapping(address => uint256) private _holdersVestingCount;
 
-    uint256 public keeperInterval;
-    uint256 public keeperLastUpdatedTime;
-
     event Released(address indexed user, uint256 indexed amount);
     event Revoked(address indexed user, bytes32 indexed vestingId);
 
@@ -73,15 +68,12 @@ contract TMAIVesting is
      * @param token_ address of the ERC20 token contract
      */
     function initialize(
-        address token_,
-        uint256 _keeperInterval
+        address token_
     ) external initializer {
         require(token_ != address(0x0));
         __Ownable2Step_init();
         __ReentrancyGuard_init();
         _token = IERC20Upgradeable(token_);
-        keeperLastUpdatedTime = block.timestamp;
-        keeperInterval = _keeperInterval;
     }
 
     /**
@@ -137,25 +129,6 @@ contract TMAIVesting is
         return address(_token);
     }
 
-    /**
-     * @dev Set new start time after which chainlink keeper will start automation.
-     */
-    function setNewUpKeepTime(
-        uint256 _newUpKeepTime
-    ) external onlyOwner returns (bool) {
-        keeperLastUpdatedTime = _newUpKeepTime;
-        return true;
-    }
-
-    /**
-     * @dev Set new time interval after which keeper will call the contract.
-     */
-    function setNewKeeperInterval(
-        uint256 _newKeeperInterval
-    ) external onlyOwner returns (bool) {
-        keeperInterval = _newKeeperInterval;
-        return true;
-    }
 
     /**
      * @dev Send tokens to multiple accounts efficiently
@@ -220,47 +193,6 @@ contract TMAIVesting is
         return true;
     }
 
-    /**
-     * @dev Chainlink call this function to verify before call automation function.
-     */
-    function checkUpkeep(
-        bytes calldata checkData
-    )
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory /* performData */)
-    {
-        upkeepNeeded =
-            block.timestamp > keeperLastUpdatedTime &&
-            (block.timestamp.sub(keeperLastUpdatedTime) > keeperInterval);
-    }
-
-    /**
-     * @dev Chainlink automation function that will release tokens to all users. This function is public and anyone can call this functions.
-     */
-    function performUpkeep(bytes calldata performData) external override {
-        //We highly recommend revalidating the upkeep in the performUpkeep function
-        if (
-            block.timestamp > keeperLastUpdatedTime &&
-            (block.timestamp.sub(keeperLastUpdatedTime) > keeperInterval)
-        ) {
-            for (uint256 i = 0; i < _vestingSchedulesIds.length; i++) {
-                if (
-                    _vestingSchedules[_vestingSchedulesIds[i]].initialized &&
-                    !_vestingSchedules[_vestingSchedulesIds[i]].revoked
-                ) {
-                    uint256 _releasableAmount = computeReleasableAmount(
-                        _vestingSchedulesIds[i]
-                    );
-                    if (_releasableAmount > 0) {
-                        release(_vestingSchedulesIds[i], _releasableAmount);
-                    }
-                }
-            }
-        }
-        keeperLastUpdatedTime = block.timestamp;
-    }
 
     /**
      * @notice Creates a new vesting schedule for a beneficiary.
