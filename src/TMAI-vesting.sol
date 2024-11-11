@@ -419,11 +419,8 @@ contract TMAIVesting is
             "TMAIVesting: cannot release tokens, not enough vested tokens"
         );
         vestingSchedule.released = vestingSchedule.released.add(amount);
-        address payable beneficiaryPayable = payable(
-            vestingSchedule.beneficiary
-        );
         _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.sub(amount);
-        _token.safeTransfer(beneficiaryPayable, amount);
+        _token.safeTransfer(vestingSchedule.beneficiary, amount);
         emit Released(vestingSchedule.beneficiary, amount);
     }
 
