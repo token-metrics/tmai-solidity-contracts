@@ -164,7 +164,8 @@ contract GovernorAlpha is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(quorumPercentage <= 100, "Invalid quorum percentage");
+        require(quorumPercentage <= 100 && quorumPercentage > 0, "Invalid quorum percentage");
+
         quorumPercentage = _quorumPercentage;
     }
 
