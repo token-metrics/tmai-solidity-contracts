@@ -100,12 +100,6 @@ contract GovernorAlpha is Initializable {
         bool support,
         uint256 votes
     );
-    event VoteChanged(
-        address voter,
-        uint256 proposalId,
-        bool support,
-        uint256 votes
-    );
     event ProposalCanceled(uint256 id);
     event ProposalQueued(uint256 id, uint256 eta);
     event ProposalExecuted(uint256 id);
@@ -638,34 +632,18 @@ contract GovernorAlpha is Initializable {
         Receipt storage receipt = proposal.receipts[voter];
 
         // Cast vote if the voter hasn't voted yet
-        if (!receipt.hasVoted) {
-            if (support) {
-                proposal.forVotes += averageBalance;
-            } else {
-                proposal.againstVotes += averageBalance;
-            }
-            proposal.totalVoters++;
-            receipt.hasVoted = true;
-            receipt.support = support;
-            receipt.votes = averageBalance;
-            emit VoteCast(voter, proposalId, support, averageBalance);
+        require(!receipt.hasVoted, "User has already voted");
+        if (support) {
+            proposal.forVotes += averageBalance;
         } else {
-            // Change the vote if it's different from the previous vote
-            require(
-                support != receipt.support,
-                "GovernorAlpha::_castVote: voter already voted"
-            );
-            if (support) {
-                proposal.againstVotes -= receipt.votes;
-                proposal.forVotes += averageBalance;
-            } else {
-                proposal.forVotes -= receipt.votes;
-                proposal.againstVotes += averageBalance;
-            }
-            receipt.support = support;
-            receipt.votes = averageBalance;
-            emit VoteChanged(voter, proposalId, support, averageBalance);
+            proposal.againstVotes += averageBalance;
         }
+        proposal.totalVoters++;
+        receipt.hasVoted = true;
+        receipt.support = support;
+        receipt.votes = averageBalance;
+        emit VoteCast(voter, proposalId, support, averageBalance);
+         
     }
 
     /**
