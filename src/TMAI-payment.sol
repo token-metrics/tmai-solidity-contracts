@@ -65,7 +65,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             _signatureVerifier != address(0),
             "Signature verifier address cannot be zero address"
         );
-        require(_daoShare <= 3000 && _daoShare >= 500, "DAO Share cannot be greater than 10000 or less than 500");
+        require(_daoShare <= 10000, "DAO Share cannot be greater than 100 percent");
 
         __Ownable2Step_init();
         treasury = _treasury;
@@ -143,7 +143,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
 
     // Update DAO share
     function updateDAOShare(uint256 _share) public onlyOwner {
-        require(_share <= 3000 && _share >= 500, "DAO share cannot be greater than 10000 or less than 500");
+        require(_share <= 10000, "DAO share cannot be greater than 100 percent");
         daoShare = _share;
     }
 
