@@ -82,8 +82,9 @@ describe("TMAIPayment", function () {
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
-                { name: "validity", type: "uint256" }],
-                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+                { name: "validity", type: "uint256" },
+                { name: "nonce", type: "uint256" }],
+                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 0]
             );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
@@ -113,8 +114,9 @@ describe("TMAIPayment", function () {
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
-                { name: "validity", type: "uint256" }],
-                [user.address, "data-api", "basic", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+                { name: "validity", type: "uint256" },
+                { name: "nonce", type: "uint256" }],
+                [user.address, "data-api", "basic", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 1]
             );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
@@ -136,8 +138,9 @@ describe("TMAIPayment", function () {
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
-                { name: "validity", type: "uint256" }],
-                [user.address, "data-api", "premium", 60 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10]
+                { name: "validity", type: "uint256" },
+                { name: "nonce", type: "uint256" }],
+                [user.address, "data-api", "premium", 60 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10, 2]
             );
             const upgradeMessageHash = keccak256(upgradeEncodedMessage);
             const upgradeSignature = await minter.signMessage(ethers.getBytes(upgradeMessageHash));
@@ -156,6 +159,38 @@ describe("TMAIPayment", function () {
             const planDetails = await mockNFT.tokenIdToPlanDetails(tokenId);
             expect(planDetails.planType).to.equal("premium");
             expect(planDetails.expiryDate).to.be.closeTo((await ethers.provider.getBlock()).timestamp + 60 * 24 * 60 * 60, 10);
+        });
+
+        it("Should not allow replaying a nonce", async function () {
+            // Create a valid signature for the payment
+            const encodedMessage = encodeAbiParameters(
+                [{ name: "userAddress", type: "address" },
+                { name: "section", type: "string" },
+                { name: "planType", type: "string" },
+                { name: "expiryDate", type: "uint256" },
+                { name: "token", type: "address" },
+                { name: "tokenAmount", type: "uint256" },
+                { name: "validity", type: "uint256" },
+                { name: "nonce", type: "uint256" }],
+                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 3]
+            );
+            const messageHash = keccak256(encodedMessage);
+            const signature = await minter.signMessage(ethers.getBytes(messageHash));
+
+            const signatureData = {
+                encodedMessage: encodedMessage,
+                messageHash: messageHash,
+                signature: signature
+            };
+
+            // Approve USDC spending
+            await mockUSDC.connect(user).approve(await paymentContract.getAddress(), ethers.parseUnits("100", 6));
+
+            // Process the payment and create the subscription
+            await paymentContract.connect(user).processPayment(signatureData, false);
+
+            // Try to replay the same payment
+            await expect(paymentContract.connect(user).processPayment(signatureData, false)).to.be.revertedWith("Invalid nonce");
         });
     });
 
