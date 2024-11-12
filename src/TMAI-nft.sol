@@ -18,7 +18,7 @@ contract TMAISoulboundNFT is
     }
 
     address public minter;
-    string public baseURI;  // Base URI for constructing token URIs
+    string public baseURI; // Base URI for constructing token URIs
 
     uint256 private _tokenIdCounter;
     mapping(address => mapping(string => uint256)) public userToTokenId; // user -> section -> tokenId
@@ -128,7 +128,7 @@ contract TMAISoulboundNFT is
         uint256 tokenId = userToTokenId[user][section];
         if (tokenId == 0) return false; // No NFT minted yet
 
-        return !_isExpired(tokenId);
+        return _isExpired(tokenId);
     }
 
     function _isExpired(uint256 tokenId) internal view returns (bool) {
@@ -148,7 +148,8 @@ contract TMAISoulboundNFT is
         uint256 tokenId
     ) public view override returns (string memory) {
         PlanDetails memory plan = tokenIdToPlanDetails[tokenId];
-        return string(abi.encodePacked(baseURI, plan.section, "/", plan.planType));
+        return
+            string(abi.encodePacked(baseURI, plan.section, "/", plan.planType));
     }
 
     function grantMinterRole(address _minter) external onlyOwner {
