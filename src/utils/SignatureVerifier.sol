@@ -38,6 +38,7 @@ contract SignatureVerifier is Initializable {
         address token;
         uint256 tokenAmount;
         uint256 validity;
+        uint256 nonce;
     }
 
     address public signerAddress; // The address corresponding to the private key that signs the messages
@@ -139,10 +140,11 @@ contract SignatureVerifier is Initializable {
             uint256 expiryDate,
             address token,
             uint256 tokenAmount,
-            uint256 validity
+            uint256 validity,
+            uint256 nonce
         ) = abi.decode(
                 _signature.encodedMessage,
-                (address, string, string, uint256, address, uint256, uint256)
+                (address, string, string, uint256, address, uint256, uint256, uint256)
             );
 
         // Check message validity
@@ -156,7 +158,8 @@ contract SignatureVerifier is Initializable {
                 expiryDate,
                 token,
                 tokenAmount,
-                validity
+                validity,
+                nonce
             );
     }
 

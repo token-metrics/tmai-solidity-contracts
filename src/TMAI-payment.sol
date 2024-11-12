@@ -22,6 +22,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     SignatureVerifier public signatureVerifier; // Address of the SignatureVerifier contract
 
     mapping(address => bool) public allowedTokens; // Mapping to track allowed payment tokens
+    mapping(address => uint256) public nonces; // Track each user’s transaction count
 
     event RevenueDistributed(
         uint256 revenue,
@@ -83,6 +84,9 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         SignatureVerifier.PaymentMessage memory message = signatureVerifier
             .verifyPaymentSignature(signature);
 
+        // Ensure the nonce matches the current nonce for the user
+        require(message.nonce == nonces[message.userAddress], "Invalid nonce");
+
         // Ensure the token is allowed for payments
         require(allowedTokens[message.token], "Token not allowed");
 
@@ -125,6 +129,9 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
                 message.expiryDate
             );
         }
+
+        // Increment nonce after successful processing
+        nonces[message.userAddress]++;
     }
 
     // Distribute revenue from payments to treasury and DAO
