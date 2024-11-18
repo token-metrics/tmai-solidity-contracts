@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20BurnableUpgradeable.sol";
@@ -15,7 +14,6 @@ contract TMAIToken is
     PausableUpgradeable,
     Ownable2StepUpgradeable
 {
-    using SafeMathUpgradeable for uint256;
     address public allocationContract;
 
     uint256 public startBlock;
@@ -72,7 +70,7 @@ contract TMAIToken is
     // Time period for which admin want to implement the antibot check
     function setSellLimitTime(uint256 _blocks) external onlyOwner {
         blocks = _blocks;
-        endBlock = block.number.add(_blocks);
+        endBlock = block.number + _blocks;
         emit SetSellLimitTime(_blocks);
     }
 
@@ -87,7 +85,7 @@ contract TMAIToken is
             if (endBlock > block.number) {
                 require(
                     amount <=
-                        block.number.sub(startBlock).mul(tgeAmount).div(blocks),
+                        (block.number - startBlock) * tgeAmount / blocks,
                     "Trade amount reached"
                 );
             }

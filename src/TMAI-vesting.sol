@@ -2,7 +2,6 @@
 pragma solidity ^0.8.2;
 
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
@@ -18,7 +17,6 @@ contract TMAIVesting is
     ReentrancyGuardUpgradeable,
     PausableUpgradeable
 {
-    using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
     struct VestingSchedule {
         bool initialized;
@@ -146,7 +144,7 @@ contract TMAIVesting is
         );
         uint256 total = 0;
         for (uint256 i = 0; i < recipients.length; i++) {
-            total = total.add(values[i]);
+            total = total + values[i];
         }
         _token.safeTransferFrom(msg.sender, address(this), total);
         for (uint256 i = 0; i < recipients.length; i++) {
@@ -220,7 +218,7 @@ contract TMAIVesting is
         uint256 _released
     ) public nonReentrant onlyOwner {
         require(
-            this.getWithdrawableAmount() >= _amount.sub(_released),
+            this.getWithdrawableAmount() >= _amount - _released,
             "TMAIVesting: cannot create vesting schedule because not sufficient tokens"
         );
         require(
@@ -235,11 +233,11 @@ contract TMAIVesting is
         );
 
         // Calculate the initial release amount
-        uint256 _initialRelease = _amount.mul(_initialUnlock).div(100);
+        uint256 _initialRelease = _amount * _initialUnlock / 100;
 
         // Ensure that the initial release and already released tokens do not exceed the total amount
         require(
-            _initialRelease.add(_released) <= _amount,
+            _initialRelease + _released <= _amount,
             "TMAIVesting: initial release and released tokens exceed total amount"
         );
 
@@ -252,7 +250,7 @@ contract TMAIVesting is
             "TMAIVesting: vesting schedule already exists"
         );
 
-        uint256 cliff = _start.add(_cliff);
+        uint256 cliff = _start + _cliff;
 
         _vestingSchedules[vestingScheduleId] = VestingSchedule(
             true,
@@ -264,17 +262,17 @@ contract TMAIVesting is
             _revocable,
             _amount,
             _initialUnlock,
-            _released.add(_initialRelease),
+            _released + _initialRelease,
             false
         );
 
         // Update the total amount of tokens allocated for vesting
-        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.add(_amount);
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount + _amount;
 
         _userVestingScheduleId[vestingScheduleId] = _vestingSchedulesIds.length;
         _vestingSchedulesIds.push(vestingScheduleId);
         uint256 currentVestingCount = _holdersVestingCount[_beneficiary];
-        _holdersVestingCount[_beneficiary] = currentVestingCount.add(1);
+        _holdersVestingCount[_beneficiary] = currentVestingCount + 1;
 
         if (_initialRelease > 0) {
             _token.safeTransfer(_beneficiary, _initialRelease);
@@ -304,16 +302,14 @@ contract TMAIVesting is
         if (vestedAmount > 0) {
             _release(vestingScheduleId, vestedAmount);
         }
-        uint256 unreleased = vestingSchedule.amountTotal.sub(
-            vestingSchedule.released
-        );
-        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.sub(
-            unreleased
-        );
+        uint256 unreleased = vestingSchedule.amountTotal - 
+            vestingSchedule.released;
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount - 
+            unreleased;
         vestingSchedule.revoked = true;
 
         bytes32 element = _vestingSchedulesIds[
-            _vestingSchedulesIds.length.sub(1)
+            _vestingSchedulesIds.length - 1
         ];
         uint256 tempVestingId = _userVestingScheduleId[vestingScheduleId];
         _vestingSchedulesIds[tempVestingId] = element;
@@ -356,8 +352,8 @@ contract TMAIVesting is
             vestedAmount >= amount,
             "TMAIVesting: cannot release tokens, not enough vested tokens"
         );
-        vestingSchedule.released = vestingSchedule.released.add(amount);
-        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.sub(amount);
+        vestingSchedule.released = vestingSchedule.released + amount;
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount - amount;
         _token.safeTransfer(vestingSchedule.beneficiary, amount);
         emit Released(vestingSchedule.beneficiary, amount);
     }
@@ -403,7 +399,7 @@ contract TMAIVesting is
      * @return the amount of tokens
      */
     function getWithdrawableAmount() external view returns (uint256) {
-        return _token.balanceOf(address(this)).sub(_vestingSchedulesTotalAmount);
+        return _token.balanceOf(address(this)) - _vestingSchedulesTotalAmount;
     }
 
     /**
@@ -429,7 +425,7 @@ contract TMAIVesting is
             _vestingSchedules[
                 computeVestingScheduleIdForAddressAndIndex(
                     holder,
-                    _holdersVestingCount[holder].sub(1)
+                    _holdersVestingCount[holder] - 1
                 )
             ];
     }
@@ -455,19 +451,19 @@ contract TMAIVesting is
         if ((currentTime < vestingSchedule.cliff) || vestingSchedule.revoked) {
             return 0;
         } else if (
-            currentTime >= vestingSchedule.start.add(vestingSchedule.duration)
+            currentTime >= vestingSchedule.start + vestingSchedule.duration
         ) {
-            return vestingSchedule.amountTotal.sub(vestingSchedule.released);
+            return vestingSchedule.amountTotal - vestingSchedule.released;
         } else {
-            uint256 timeFromStart = currentTime.sub(vestingSchedule.start);
+            uint256 timeFromStart = currentTime - vestingSchedule.start;
             uint256 secondsPerSlice = vestingSchedule.slicePeriodSeconds;
-            uint256 vestedSlicePeriods = timeFromStart.div(secondsPerSlice);
-            uint256 vestedSeconds = vestedSlicePeriods.mul(secondsPerSlice);
+            uint256 vestedSlicePeriods = timeFromStart / secondsPerSlice;
+            uint256 vestedSeconds = vestedSlicePeriods * secondsPerSlice;
             uint256 vestedAmount = vestingSchedule
                 .amountTotal
-                .mul(vestedSeconds)
-                .div(vestingSchedule.duration);
-            vestedAmount = vestedAmount.sub(vestingSchedule.released);
+                *vestedSeconds
+                /vestingSchedule.duration;
+            vestedAmount = vestedAmount - vestingSchedule.released;
             return vestedAmount;
         }
     }

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
@@ -12,7 +11,6 @@ import "./interface/ITMAISoulboundNFT.sol";
 import "./utils/SignatureVerifier.sol";
 
 contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradeable {
-    using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     address public treasury;
@@ -140,8 +138,8 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
         uint256 revenue = IERC20Upgradeable(token).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
 
-        uint256 daoAmount = revenue.mul(daoShare).div(10000);
-        uint256 treasuryAmount = revenue.sub(daoAmount);
+        uint256 daoAmount = revenue * daoShare / 10000;
+        uint256 treasuryAmount = revenue - daoAmount;
 
         IERC20Upgradeable(token).safeTransfer(dao, daoAmount);
         IERC20Upgradeable(token).safeTransfer(treasury, treasuryAmount);

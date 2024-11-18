@@ -4,7 +4,6 @@ pragma solidity ^0.8.2;
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "./interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./utils/SignatureVerifier.sol";
 
@@ -13,7 +12,6 @@ import "./utils/SignatureVerifier.sol";
  * @dev This contract allows the community to create proposals and vote on them to govern the system. Proposals require a minimum TMAI holding to be created, and votes determine the outcome based on quorum and majority thresholds.
  */
 contract GovernorAlpha is Initializable {
-    using SafeMathUpgradeable for uint256;
     using SafeERC20 for IERC20;
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
@@ -554,14 +552,11 @@ contract GovernorAlpha is Initializable {
 
         // Check if the proposal failed to meet the quorum or the YES vote threshold
         uint256 requiredQuorum = quorumVotes();
-        uint256 requiredYesPercentage = proposal
-            .againstVotes
-            .mul(yesVoteThresholdPercentage)
-            .div(100);
+        uint256 requiredYesPercentage = proposal.againstVotes * yesVoteThresholdPercentage / 100;
 
         if (
             proposal.totalVoters < requiredQuorum ||
-            proposal.forVotes < proposal.againstVotes.add(requiredYesPercentage)
+            proposal.forVotes < proposal.againstVotes + requiredYesPercentage
         ) {
             return ProposalState.Defeated;
         }
@@ -587,7 +582,7 @@ contract GovernorAlpha is Initializable {
      * @return The number of votes required to reach quorum
      */
     function quorumVotes() public view returns (uint256) {
-        return totalTokenHolders.mul(quorumPercentage).div(100);
+        return totalTokenHolders * quorumPercentage / 100;
     }
 
     /**
@@ -658,10 +653,8 @@ contract GovernorAlpha is Initializable {
         require(msg.sender == admin, "Only admin can distribute revenue");
         uint256 revenue = IERC20(baseStableCoin).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
-        uint256 buyBackandBurnAmount = revenue.mul(buybackAndBurnPercent).div(
-            100
-        );
-        uint256 revenueShareAmount = revenue.sub(buyBackandBurnAmount);
+        uint256 buyBackandBurnAmount = revenue * buybackAndBurnPercent / 100;
+        uint256 revenueShareAmount = revenue - buyBackandBurnAmount;
         IERC20(baseStableCoin).safeTransfer(
             receiverBuyBackandBurn,
             buyBackandBurnAmount
