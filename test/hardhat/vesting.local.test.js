@@ -21,7 +21,7 @@ describe("Vesting", function () {
 
         it("Should deploy Vesting contract", async function () {
             const Vesting = await ethers.getContractFactory("TMAIVesting");
-            vesting = await upgrades.deployProxy(Vesting, [await token.getAddress(), "120"]);
+            vesting = await upgrades.deployProxy(Vesting, [await token.getAddress()]);
 
             await token.transfer(await vesting.getAddress(), 10000000000);
         });

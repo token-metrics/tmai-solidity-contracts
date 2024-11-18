@@ -227,12 +227,17 @@ contract TMAIVesting is
         require(_duration > 0, "TMAIVesting: duration must be > 0");
         require(_amount > 0, "TMAIVesting: amount must be > 0");
         require(
-            _amount >= _released,
-            "TMAIVesting: amount must be >= released"
-        );
-        require(
             _slicePeriodSeconds >= 1,
             "TMAIVesting: slicePeriodSeconds must be >= 1"
+        );
+
+        // Calculate the initial release amount
+        uint256 _initialRelease = _amount.mul(_initialUnlock).div(100);
+
+        // Ensure that the initial release and already released tokens do not exceed the total amount
+        require(
+            _initialRelease.add(_released) <= _amount,
+            "TMAIVesting: initial release and released tokens exceed total amount"
         );
 
         bytes32 vestingScheduleId = this.computeNextVestingScheduleIdForHolder(
@@ -243,9 +248,6 @@ contract TMAIVesting is
             !_vestingSchedules[vestingScheduleId].initialized,
             "TMAIVesting: vesting schedule already exists"
         );
-
-        uint256 _initialRelease = _amount.mul(_initialUnlock).div(100);
-        _released = _released.add(_initialRelease);
 
         uint256 cliff = _start.add(_cliff);
 
@@ -259,12 +261,13 @@ contract TMAIVesting is
             _revocable,
             _amount,
             _initialUnlock,
-            _released,
+            _released.add(_initialRelease),
             false
         );
-        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount
-            .add(_amount)
-            .sub(_released);
+
+        // Update the total amount of tokens allocated for vesting
+        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount.add(_amount);
+
         _userVestingScheduleId[vestingScheduleId] = _vestingSchedulesIds.length;
         _vestingSchedulesIds.push(vestingScheduleId);
         uint256 currentVestingCount = _holdersVestingCount[_beneficiary];
