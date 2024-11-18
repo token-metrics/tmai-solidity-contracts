@@ -4,12 +4,14 @@ pragma solidity ^0.8.2;
 import "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./interface/ITMAISoulboundNFT.sol";
 
 contract TMAISoulboundNFT is
     Initializable,
     ERC721Upgradeable,
-    OwnableUpgradeable
+    OwnableUpgradeable,
+    PausableUpgradeable
 {
     struct PlanDetails {
         string section;
@@ -42,8 +44,9 @@ contract TMAISoulboundNFT is
     );
 
     function initialize() public initializer {
-        __ERC721_init("SoulboundNFT", "SBT");
+        __ERC721_init("TMAI Soulbound NFT", "TMAI");
         __Ownable_init();
+        __Pausable_init();
 
         minter = msg.sender;
     }
@@ -62,7 +65,7 @@ contract TMAISoulboundNFT is
         string memory section,
         string memory planType,
         uint256 duration
-    ) external onlyMinterOrOwner {
+    ) external onlyMinterOrOwner whenNotPaused {
         // Check if the user has an active NFT and burn it if expired
         uint256 existingTokenId = userToTokenId[to][section];
         if (existingTokenId !=0 && _isExpired(existingTokenId)) {
@@ -91,7 +94,7 @@ contract TMAISoulboundNFT is
     }
 
     // Burn an existing NFT
-    function burn(uint256 tokenId) external onlyOwner {
+    function burn(uint256 tokenId) external onlyOwner whenNotPaused {
         address owner = ownerOf(tokenId);
         string memory section = tokenIdToPlanDetails[tokenId].section;
         _burn(tokenId);
@@ -176,5 +179,14 @@ contract TMAISoulboundNFT is
             "Soulbound tokens are non-transferable"
         );
         super._beforeTokenTransfer(from, to, tokenId, batchSize);
+    }
+
+    // Add functions to pause and unpause the contract
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }

@@ -11,7 +11,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./interface/ITMAISoulboundNFT.sol";
 import "./utils/SignatureVerifier.sol";
 
-contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
+contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradeable {
     using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
@@ -69,6 +69,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         require(_daoShare <= 10000, "DAO Share cannot be greater than 100 percent");
 
         __Ownable2Step_init();
+        __Pausable_init();
         treasury = _treasury;
         dao = _dao;
         daoShare = _daoShare;
@@ -80,7 +81,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     function processPayment(
         SignatureVerifier.Signature memory signature,
         bool isUpgrade
-    ) external {
+    ) external whenNotPaused {
         SignatureVerifier.PaymentMessage memory message = signatureVerifier
             .verifyPaymentSignature(signature);
 
@@ -199,5 +200,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         require(token != address(0), "Token address cannot be zero address");
         allowedTokens[token] = false;
         emit TokenDisabled(token);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }

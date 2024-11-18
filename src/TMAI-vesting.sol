@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 
 /**
  * @title TMAIVesting
@@ -14,7 +15,8 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 contract TMAIVesting is
     Initializable,
     Ownable2StepUpgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    PausableUpgradeable
 {
     using SafeMathUpgradeable for uint256;
     using SafeERC20Upgradeable for IERC20Upgradeable;
@@ -73,6 +75,7 @@ contract TMAIVesting is
         require(token_ != address(0x0));
         __Ownable2Step_init();
         __ReentrancyGuard_init();
+        __Pausable_init();
         _token = IERC20Upgradeable(token_);
     }
 
@@ -482,5 +485,13 @@ contract TMAIVesting is
         for (uint256 i = 0; i < _vestingIds.length; i++) {
             _userVestingScheduleId[_vestingIds[i]] = _vestingIndex[i];
         }
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }
