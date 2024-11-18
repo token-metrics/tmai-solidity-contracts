@@ -7,6 +7,21 @@ describe("TMAIPayment", function () {
     let mockUSDC, mockUSDT, mockNFT, mockSignatureVerifier;
     let owner, dao, treasury, user, minter;
 
+    // Enum mappings for plan types and products
+    const PlanType = {
+        Basic: 0,
+        Advanced: 1,
+        Premium: 2,
+        VIP: 3,
+    };
+
+    const Product = {
+        TradingBot: 0,
+        DataAPI: 1,
+        AnalyticsPlatform: 2,
+    };
+
+
     describe("Deployment", function () {
 
         it("Should get signers", async function () {
@@ -77,14 +92,14 @@ describe("TMAIPayment", function () {
             // Create a valid signature for the payment
             const encodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                { name: "section", type: "string" },
-                { name: "planType", type: "string" },
+                { name: "product", type: "uint8" },
+                { name: "planType", type: "uint8" },
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
                 { name: "validity", type: "uint256" },
                 { name: "nonce", type: "uint256" }],
-                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 0]
+                [user.address, Product.AnalyticsPlatform, PlanType.Premium, 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 0]
             );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
@@ -101,22 +116,25 @@ describe("TMAIPayment", function () {
             // Process the payment and create the subscription
             await paymentContract.connect(user).processPayment(signatureData, false);
 
-            const tokenId = await mockNFT.userToTokenId(user.address, "analytics");
+            const tokenId = await mockNFT.userToTokenId(user.address, Product.AnalyticsPlatform);
             expect(await mockNFT.ownerOf(tokenId)).to.equal(user.address);
+
+            const planDetails = await mockNFT.getUserPlanDetails(user.address, Product.AnalyticsPlatform);
+            expect(planDetails.planType).to.equal(PlanType.Premium);
         });
 
         it("Should upgrade an existing subscription", async function () {
             // First, create a subscription
             const encodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                { name: "section", type: "string" },
-                { name: "planType", type: "string" },
+                { name: "product", type: "uint8" },
+                { name: "planType", type: "uint8" },
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
                 { name: "validity", type: "uint256" },
                 { name: "nonce", type: "uint256" }],
-                [user.address, "data-api", "basic", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 1]
+                [user.address, Product.DataAPI, PlanType.Basic, 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 1]
             );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));
@@ -133,14 +151,14 @@ describe("TMAIPayment", function () {
             // Now, upgrade the subscription
             const upgradeEncodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                { name: "section", type: "string" },
-                { name: "planType", type: "string" },
+                { name: "product", type: "uint8" },
+                { name: "planType", type: "uint8" },
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
                 { name: "validity", type: "uint256" },
                 { name: "nonce", type: "uint256" }],
-                [user.address, "data-api", "premium", 60 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10, 2]
+                [user.address, Product.DataAPI, PlanType.Premium, 60 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("150", 6), await ethers.provider.getBlockNumber() + 10, 2]
             );
             const upgradeMessageHash = keccak256(upgradeEncodedMessage);
             const upgradeSignature = await minter.signMessage(ethers.getBytes(upgradeMessageHash));
@@ -155,9 +173,9 @@ describe("TMAIPayment", function () {
 
             await paymentContract.connect(user).processPayment(upgradeSignatureData, true);
 
-            const tokenId = await mockNFT.userToTokenId(user.address, "data-api");
+            const tokenId = await mockNFT.userToTokenId(user.address, Product.DataAPI);
             const planDetails = await mockNFT.tokenIdToPlanDetails(tokenId);
-            expect(planDetails.planType).to.equal("premium");
+            expect(planDetails.planType).to.equal(PlanType.Premium);
             expect(planDetails.expiryDate).to.be.closeTo((await ethers.provider.getBlock()).timestamp + 60 * 24 * 60 * 60, 10);
         });
 
@@ -165,14 +183,14 @@ describe("TMAIPayment", function () {
             // Create a valid signature for the payment
             const encodedMessage = encodeAbiParameters(
                 [{ name: "userAddress", type: "address" },
-                { name: "section", type: "string" },
-                { name: "planType", type: "string" },
+                { name: "product", type: "uint8" },
+                { name: "planType", type: "uint8" },
                 { name: "expiryDate", type: "uint256" },
                 { name: "token", type: "address" },
                 { name: "tokenAmount", type: "uint256" },
                 { name: "validity", type: "uint256" },
                 { name: "nonce", type: "uint256" }],
-                [user.address, "analytics", "premium", 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 3]
+                [user.address, Product.AnalyticsPlatform, PlanType.Premium, 30 * 24 * 60 * 60, await mockUSDC.getAddress(), ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, 3]
             );
             const messageHash = keccak256(encodedMessage);
             const signature = await minter.signMessage(ethers.getBytes(messageHash));

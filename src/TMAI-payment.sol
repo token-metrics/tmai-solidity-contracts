@@ -10,7 +10,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./interface/ITMAISoulboundNFT.sol";
 import "./utils/SignatureVerifier.sol";
 
-contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradeable {
+contract TMAIPayment is
+    Initializable,
+    Ownable2StepUpgradeable,
+    PausableUpgradeable
+{
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     address public treasury;
@@ -30,14 +34,14 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
     event TokensWithdrawn(address token, address to, uint256 amount);
     event SubscriptionCreated(
         address indexed user,
-        string section,
-        string planType,
+        uint8 section,
+        uint8 planType,
         uint256 expiryDate
     );
     event SubscriptionUpgraded(
         address indexed user,
-        string section,
-        string newPlanType,
+        uint8 section,
+        uint8 newPlanType,
         uint256 newExpiryDate
     );
     event TokenEnabled(address token);
@@ -64,7 +68,10 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
             _signatureVerifier != address(0),
             "Signature verifier address cannot be zero address"
         );
-        require(_daoShare <= 10000, "DAO Share cannot be greater than 100 percent");
+        require(
+            _daoShare <= 10000,
+            "DAO Share cannot be greater than 100 percent"
+        );
 
         __Ownable2Step_init();
         __Pausable_init();
@@ -103,13 +110,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
             // Upgrade the existing subscription
             ITMAISoulboundNFT(nftContract).upgradeNFT(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
             emit SubscriptionUpgraded(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
@@ -117,13 +124,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
             // Create a new subscription
             ITMAISoulboundNFT(nftContract).mint(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
             emit SubscriptionCreated(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
@@ -138,7 +145,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
         uint256 revenue = IERC20Upgradeable(token).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
 
-        uint256 daoAmount = revenue * daoShare / 10000;
+        uint256 daoAmount = (revenue * daoShare) / 10000;
         uint256 treasuryAmount = revenue - daoAmount;
 
         IERC20Upgradeable(token).safeTransfer(dao, daoAmount);
@@ -149,7 +156,10 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable, PausableUpgradea
 
     // Update DAO share
     function updateDAOShare(uint256 _share) public onlyOwner {
-        require(_share <= 10000, "DAO share cannot be greater than 100 percent");
+        require(
+            _share <= 10000,
+            "DAO share cannot be greater than 100 percent"
+        );
         daoShare = _share;
     }
 

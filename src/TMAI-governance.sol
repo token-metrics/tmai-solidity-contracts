@@ -16,7 +16,6 @@ contract GovernorAlpha is Initializable {
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
 
-
     uint256 public votingPeriod; // ~7 days in blocks
     uint256 public blocksPerDay; // Number of blocks per day
     uint256 public votingDelay; // Delay before voting starts
@@ -128,7 +127,10 @@ contract GovernorAlpha is Initializable {
     ) external initializer {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
-        require(quorumPercentage <= 100 && quorumPercentage > 0, "Invalid quorum percentage");
+        require(
+            quorumPercentage <= 100 && quorumPercentage > 0,
+            "Invalid quorum percentage"
+        );
         require(_baseStableCoin != address(0), "Zero Address");
 
         timelock = TimelockInterface(timelock_);
@@ -158,7 +160,10 @@ contract GovernorAlpha is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(quorumPercentage <= 100 && quorumPercentage > 0, "Invalid quorum percentage");
+        require(
+            quorumPercentage <= 100 && quorumPercentage > 0,
+            "Invalid quorum percentage"
+        );
 
         quorumPercentage = _quorumPercentage;
     }
@@ -255,7 +260,10 @@ contract GovernorAlpha is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(_totalTarget <= 10 && _totalTarget > 0, "Target count should be greater than 0 and less than or equal to 10");
+        require(
+            _totalTarget <= 10 && _totalTarget > 0,
+            "Target count should be greater than 0 and less than or equal to 10"
+        );
         totalTarget = _totalTarget;
     }
 
@@ -331,8 +339,7 @@ contract GovernorAlpha is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) internal returns (uint256) {
-        uint256 startBlock = block.number +
-            votingDelay;
+        uint256 startBlock = block.number + votingDelay;
         uint256 endBlock = startBlock + votingPeriod;
 
         proposalCount++;
@@ -552,7 +559,8 @@ contract GovernorAlpha is Initializable {
 
         // Check if the proposal failed to meet the quorum or the YES vote threshold
         uint256 requiredQuorum = quorumVotes();
-        uint256 requiredYesPercentage = proposal.againstVotes * yesVoteThresholdPercentage / 100;
+        uint256 requiredYesPercentage = (proposal.againstVotes *
+            yesVoteThresholdPercentage) / 100;
 
         if (
             proposal.totalVoters < requiredQuorum ||
@@ -582,7 +590,7 @@ contract GovernorAlpha is Initializable {
      * @return The number of votes required to reach quorum
      */
     function quorumVotes() public view returns (uint256) {
-        return totalTokenHolders * quorumPercentage / 100;
+        return (totalTokenHolders * quorumPercentage) / 100;
     }
 
     /**
@@ -638,7 +646,6 @@ contract GovernorAlpha is Initializable {
         receipt.support = support;
         receipt.votes = averageBalance;
         emit VoteCast(voter, proposalId, support, averageBalance);
-         
     }
 
     /**
@@ -653,7 +660,7 @@ contract GovernorAlpha is Initializable {
         require(msg.sender == admin, "Only admin can distribute revenue");
         uint256 revenue = IERC20(baseStableCoin).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
-        uint256 buyBackandBurnAmount = revenue * buybackAndBurnPercent / 100;
+        uint256 buyBackandBurnAmount = (revenue * buybackAndBurnPercent) / 100;
         uint256 revenueShareAmount = revenue - buyBackandBurnAmount;
         IERC20(baseStableCoin).safeTransfer(
             receiverBuyBackandBurn,

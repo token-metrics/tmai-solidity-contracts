@@ -8,6 +8,20 @@ describe("SignatureVerifier", function () {
   let addr1;
   let addr2;
 
+  // Enum mappings for plan types and products
+  const PlanType = {
+    Basic: 0,
+    Advanced: 1,
+    Premium: 2,
+    VIP: 3,
+  };
+
+  const Product = {
+    TradingBot: 0,
+    DataAPI: 1,
+    AnalyticsPlatform: 2,
+  };
+
   describe("Deployment", function () {
 
     it("Should get signers", async function () {
@@ -29,18 +43,20 @@ describe("SignatureVerifier", function () {
     let encodedMessage;
     let messageHash;
     let signature;
+    let nonce = 0;
 
     it("Should create a valid payment signature", async function () {
       // Encode the message using viem's encodeAbiParameters
       encodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
-        { name: "section", type: "string" },
-        { name: "planType", type: "string" },
+        { name: "product", type: "uint8" },
+        { name: "planType", type: "uint8" },
         { name: "expiryDate", type: "uint256" },
         { name: "token", type: "address" },
         { name: "tokenAmount", type: "uint256" },
-        { name: "validity", type: "uint256" }],
-        [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10]
+        { name: "validity", type: "uint256" },
+        { name: "nonce", type: "uint256" }],
+        [addr1.address, Product.AnalyticsPlatform, PlanType.Premium, 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() + 10, nonce]
       );
 
       // Hash the encoded message
@@ -61,10 +77,11 @@ describe("SignatureVerifier", function () {
 
       // Verify the decoded message content
       expect(decodedMessage.userAddress).to.equal(addr1.address);
-      expect(decodedMessage.section).to.equal("analytics");
-      expect(decodedMessage.planType).to.equal("premium");
+      expect(decodedMessage.product).to.equal(Product.AnalyticsPlatform);
+      expect(decodedMessage.planType).to.equal(PlanType.Premium);
       expect(decodedMessage.expiryDate).to.equal(30 * 24 * 60 * 60);
       expect(decodedMessage.tokenAmount).to.equal(ethers.parseUnits("100", 6));
+      expect(decodedMessage.nonce).to.equal(nonce);
     });
 
     it("Should fail payment verification with an incorrect signer", async function () {
@@ -84,13 +101,14 @@ describe("SignatureVerifier", function () {
     it("Should fail payment verification for an expired message", async function () {
       let expiredEncodedMessage = encodeAbiParameters(
         [{ name: "userAddress", type: "address" },
-        { name: "section", type: "string" },
-        { name: "planType", type: "string" },
+        { name: "product", type: "uint8" },
+        { name: "planType", type: "uint8" },
         { name: "expiryDate", type: "uint256" },
         { name: "token", type: "address" },
         { name: "tokenAmount", type: "uint256" },
-        { name: "validity", type: "uint256" }],
-        [addr1.address, "analytics", "premium", 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() - 1]
+        { name: "validity", type: "uint256" },
+        { name: "nonce", type: "uint256" }],
+        [addr1.address, Product.AnalyticsPlatform, PlanType.Premium, 30 * 24 * 60 * 60, addr2.address, ethers.parseUnits("100", 6), await ethers.provider.getBlockNumber() - 1, nonce]
       );
 
       const expiredMessageHash = keccak256(expiredEncodedMessage);

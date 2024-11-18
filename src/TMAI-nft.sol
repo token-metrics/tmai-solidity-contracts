@@ -46,8 +46,20 @@ contract TMAISoulboundNFT is
         uint256 newExpiryDate
     );
 
-    enum PlanType { Basic, Advanced, Premium, VIP } // Define valid plan types
-    enum Product { TradingBot, DataAPI, AnalyticsPlatform } // Define valid products
+    // Define valid plan types
+    enum PlanType {
+        Basic,
+        Advanced,
+        Premium,
+        VIP
+    }
+
+    // Define valid products
+    enum Product {
+        TradingBot,
+        DataAPI,
+        AnalyticsPlatform
+    }
 
     function initialize() public initializer {
         __ERC721_init("TMAI Soulbound NFT", "TMAI");
@@ -177,8 +189,7 @@ contract TMAISoulboundNFT is
         string memory product = uint256(plan.product).toString();
         string memory planType = uint256(plan.planType).toString();
 
-        return
-            string(abi.encodePacked(baseURI, product, "/", planType));
+        return string(abi.encodePacked(baseURI, product, "/", planType));
     }
 
     function grantMinterRole(address _minter) external onlyOwner {

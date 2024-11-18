@@ -35,8 +35,8 @@ contract TMAIToken is
         __Ownable2Step_init();
         __Pausable_init();
         allocationContract = _allocationContract;
-        _mint(allocationContract, 10000000000 * uint256(10)**decimals());
-        tgeAmount = 2000000000 * uint256(10)**decimals();
+        _mint(allocationContract, 10000000000 * uint256(10) ** decimals());
+        tgeAmount = 2000000000 * uint256(10) ** decimals();
     }
 
     // Pause tokens
@@ -85,7 +85,7 @@ contract TMAIToken is
             if (endBlock > block.number) {
                 require(
                     amount <=
-                        (block.number - startBlock) * tgeAmount / blocks,
+                        ((block.number - startBlock) * tgeAmount) / blocks,
                     "Trade amount reached"
                 );
             }

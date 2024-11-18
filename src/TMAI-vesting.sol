@@ -69,9 +69,7 @@ contract TMAIVesting is
      * @dev Creates a vesting contract.
      * @param token_ address of the ERC20 token contract
      */
-    function initialize(
-        address token_
-    ) external initializer {
+    function initialize(address token_) external initializer {
         require(token_ != address(0x0));
         __Ownable2Step_init();
         __ReentrancyGuard_init();
@@ -131,7 +129,6 @@ contract TMAIVesting is
     function getToken() external view returns (address) {
         return address(_token);
     }
-
 
     /**
      * @dev Send tokens to multiple accounts efficiently
@@ -206,7 +203,6 @@ contract TMAIVesting is
         return true;
     }
 
-
     /**
      * @notice Creates a new vesting schedule for a beneficiary.
      * @param _beneficiary address of the beneficiary to whom vested tokens are transferred
@@ -245,7 +241,7 @@ contract TMAIVesting is
         );
 
         // Calculate the initial release amount
-        uint256 _initialRelease = _amount * _initialUnlock / 100;
+        uint256 _initialRelease = (_amount * _initialUnlock) / 100;
 
         // Ensure that the initial release and already released tokens do not exceed the total amount
         require(
@@ -314,15 +310,14 @@ contract TMAIVesting is
         if (vestedAmount > 0) {
             _release(vestingScheduleId, vestedAmount);
         }
-        uint256 unreleased = vestingSchedule.amountTotal - 
+        uint256 unreleased = vestingSchedule.amountTotal -
             vestingSchedule.released;
-        _vestingSchedulesTotalAmount = _vestingSchedulesTotalAmount - 
+        _vestingSchedulesTotalAmount =
+            _vestingSchedulesTotalAmount -
             unreleased;
         vestingSchedule.revoked = true;
 
-        bytes32 element = _vestingSchedulesIds[
-            _vestingSchedulesIds.length - 1
-        ];
+        bytes32 element = _vestingSchedulesIds[_vestingSchedulesIds.length - 1];
         uint256 tempVestingId = _userVestingScheduleId[vestingScheduleId];
         _vestingSchedulesIds[tempVestingId] = element;
         _userVestingScheduleId[element] = tempVestingId;
@@ -471,10 +466,8 @@ contract TMAIVesting is
             uint256 secondsPerSlice = vestingSchedule.slicePeriodSeconds;
             uint256 vestedSlicePeriods = timeFromStart / secondsPerSlice;
             uint256 vestedSeconds = vestedSlicePeriods * secondsPerSlice;
-            uint256 vestedAmount = vestingSchedule
-                .amountTotal
-                *vestedSeconds
-                /vestingSchedule.duration;
+            uint256 vestedAmount = (vestingSchedule.amountTotal *
+                vestedSeconds) / vestingSchedule.duration;
             vestedAmount = vestedAmount - vestingSchedule.released;
             return vestedAmount;
         }

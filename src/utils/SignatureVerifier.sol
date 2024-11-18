@@ -32,8 +32,8 @@ contract SignatureVerifier is Initializable {
     // Struct to store the decoded payment message
     struct PaymentMessage {
         address userAddress;
-        string section;
-        string planType;
+        uint8 product;
+        uint8 planType;
         uint256 expiryDate;
         address token;
         uint256 tokenAmount;
@@ -135,8 +135,8 @@ contract SignatureVerifier is Initializable {
         // Decode and validate the payment message
         (
             address userAddress,
-            string memory section,
-            string memory planType,
+            uint8 product,
+            uint8 planType,
             uint256 expiryDate,
             address token,
             uint256 tokenAmount,
@@ -144,7 +144,16 @@ contract SignatureVerifier is Initializable {
             uint256 nonce
         ) = abi.decode(
                 _signature.encodedMessage,
-                (address, string, string, uint256, address, uint256, uint256, uint256)
+                (
+                    address,
+                    uint8,
+                    uint8,
+                    uint256,
+                    address,
+                    uint256,
+                    uint256,
+                    uint256
+                )
             );
 
         // Check message validity
@@ -153,7 +162,7 @@ contract SignatureVerifier is Initializable {
         return
             PaymentMessage(
                 userAddress,
-                section,
+                product,
                 planType,
                 expiryDate,
                 token,
