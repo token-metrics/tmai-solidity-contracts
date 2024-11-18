@@ -46,6 +46,9 @@ contract TMAIPayment is
     );
     event TokenEnabled(address token);
     event TokenDisabled(address token);
+    event DAOShareUpdated(uint256 newShare);
+    event DAOUpdated(address newDAO);
+    event TreasuryUpdated(address newTreasury);
 
     // Initialize contract with required addresses
     function initialize(
@@ -155,12 +158,13 @@ contract TMAIPayment is
     }
 
     // Update DAO share
-    function updateDAOShare(uint256 _share) public onlyOwner {
+    function updateDAOShare(uint256 newShare) external onlyOwner {
         require(
-            _share <= 10000,
+            newShare <= 10000,
             "DAO share cannot be greater than 100 percent"
         );
-        daoShare = _share;
+        daoShare = newShare;
+        emit DAOShareUpdated(newShare);
     }
 
     // Withdraw tokens from the contract
@@ -171,18 +175,20 @@ contract TMAIPayment is
     }
 
     // Update DAO address
-    function updateDAO(address _dao) public onlyOwner {
-        require(_dao != address(0), "DAO address cannot be zero address");
-        dao = _dao;
+    function updateDAO(address newDAO) external onlyOwner {
+        require(newDAO != address(0), "DAO address cannot be zero address");
+        dao = newDAO;
+        emit DAOUpdated(newDAO);
     }
 
     // Update Treasury address
-    function updateTreasury(address _treasury) public onlyOwner {
+    function updateTreasury(address newTreasury) external onlyOwner {
         require(
-            _treasury != address(0),
+            newTreasury != address(0),
             "Treasury address cannot be zero address"
         );
-        treasury = _treasury;
+        treasury = newTreasury;
+        emit TreasuryUpdated(newTreasury);
     }
 
     // Allow updating the SignatureVerifier contract address

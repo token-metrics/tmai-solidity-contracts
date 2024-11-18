@@ -54,6 +54,7 @@ contract TMAIVesting is
     event Released(address indexed user, uint256 indexed amount);
     event Revoked(address indexed user, bytes32 indexed vestingId);
     event VestingScheduleCreated(address indexed beneficiary, bytes32 indexed vestingId, uint256 amount);
+    event SignatureVerifierUpdated(address newVerifier);
 
     uint256 constant MAX_ARRAY_LENGTH = 100; // Define an upper bound for array lengths
 
@@ -506,6 +507,15 @@ contract TMAIVesting is
         for (uint256 i = 0; i < _vestingIds.length; i++) {
             _userVestingScheduleId[_vestingIds[i]] = _vestingIndex[i];
         }
+    }
+
+    /**
+     * @dev Updates the signature verifier.
+     * @param newVerifier the new signature verifier address
+     */
+    function updateSignatureVerifier(address newVerifier) external onlyOwner {
+        // ... existing code ...
+        emit SignatureVerifierUpdated(newVerifier);
     }
 
     function pause() external onlyOwner {

@@ -107,6 +107,10 @@ contract GovernorAlpha is Initializable {
         address revenueShareReceiver,
         uint256 revenueShareAmount
     );
+    event MinProposalTimeIntervalSecUpdated(uint256 newInterval);
+    event VotingPeriodUpdated(uint256 newPeriod);
+    event AdminUpdated(address newAdmin);
+    event QuorumValueUpdated(uint256 newQuorum);
 
     /**
      * @notice Initialize the contract with necessary parameters
@@ -166,6 +170,7 @@ contract GovernorAlpha is Initializable {
         );
 
         quorumPercentage = _quorumPercentage;
+        emit QuorumValueUpdated(_quorumPercentage);
     }
 
     /**
@@ -177,6 +182,7 @@ contract GovernorAlpha is Initializable {
         require(msg.sender == admin, "Call must come from Admin.");
         require(_admin != address(0), "Zero Address");
         admin = _admin;
+        emit AdminUpdated(_admin);
     }
 
     /**
@@ -190,6 +196,7 @@ contract GovernorAlpha is Initializable {
             "Call must come from Timelock."
         );
         votingPeriod = _votingPeriod;
+        emit VotingPeriodUpdated(_votingPeriod);
     }
 
     /**
@@ -205,6 +212,7 @@ contract GovernorAlpha is Initializable {
             "Call must come from Timelock."
         );
         minProposalTimeIntervalSec = _minProposalTimeIntervalSec;
+        emit MinProposalTimeIntervalSecUpdated(_minProposalTimeIntervalSec);
     }
 
     /**

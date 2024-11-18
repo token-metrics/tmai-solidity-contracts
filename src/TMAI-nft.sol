@@ -45,6 +45,7 @@ contract TMAISoulboundNFT is
         PlanType newPlanType,
         uint256 newExpiryDate
     );
+    event MinterRoleGranted(address account);
 
     // Define valid plan types
     enum PlanType {
@@ -192,8 +193,9 @@ contract TMAISoulboundNFT is
         return string(abi.encodePacked(baseURI, product, "/", planType));
     }
 
-    function grantMinterRole(address _minter) external onlyOwner {
-        minter = _minter;
+    function grantMinterRole(address account) external onlyOwner {
+        minter = account;
+        emit MinterRoleGranted(account);
     }
 
     // Prevent transfers by anyone other than the owner (contract owner)
