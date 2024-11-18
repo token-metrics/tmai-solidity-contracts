@@ -61,9 +61,9 @@ contract TMAISoulboundNFT is
         string memory planType,
         uint256 duration
     ) external onlyMinterOrOwner {
-        // Burn the expired NFT if it exists
-        if (_hasActiveNFT(to, section)) {
-            uint256 existingTokenId = userToTokenId[to][section];
+        // Check if the user has an active NFT and burn it if expired
+        uint256 existingTokenId = userToTokenId[to][section];
+        if (existingTokenId !=0 && _isExpired(existingTokenId)) {
             _burn(existingTokenId);
             emit SubscriptionBurned(existingTokenId, to);
         }
@@ -89,9 +89,10 @@ contract TMAISoulboundNFT is
     // Burn an existing NFT
     function burn(uint256 tokenId) external onlyOwner {
         address owner = ownerOf(tokenId);
+        string memory section = tokenIdToPlanDetails[tokenId].section;
         _burn(tokenId);
         delete tokenIdToPlanDetails[tokenId];
-        delete userToTokenId[owner][tokenIdToPlanDetails[tokenId].section];
+        delete userToTokenId[owner][section];
 
         emit SubscriptionBurned(tokenId, owner);
     }
@@ -121,14 +122,16 @@ contract TMAISoulboundNFT is
         emit BaseURISet(_baseURI);
     }
 
-    function _hasActiveNFT(
+    function hasActiveNFT(
         address user,
         string memory section
-    ) internal view returns (bool) {
+    ) external view returns (bool) {
         uint256 tokenId = userToTokenId[user][section];
-        if (tokenId == 0) return false; // No NFT minted yet
-
-        return _isExpired(tokenId);
+        if (tokenId == 0) {
+            return false; // User does not own an NFT for this section
+        }
+        PlanDetails memory plan = tokenIdToPlanDetails[tokenId];
+        return block.timestamp <= plan.expiryDate; // Check if the NFT is active
     }
 
     function _isExpired(uint256 tokenId) internal view returns (bool) {
