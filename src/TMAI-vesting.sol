@@ -53,6 +53,7 @@ contract TMAIVesting is
 
     event Released(address indexed user, uint256 indexed amount);
     event Revoked(address indexed user, bytes32 indexed vestingId);
+    event VestingScheduleCreated(address indexed beneficiary, bytes32 indexed vestingId, uint256 amount);
 
     uint256 constant MAX_ARRAY_LENGTH = 100; // Define an upper bound for array lengths
 
@@ -236,8 +237,12 @@ contract TMAIVesting is
         require(_duration > 0, "TMAIVesting: duration must be > 0");
         require(_amount > 0, "TMAIVesting: amount must be > 0");
         require(
-            _slicePeriodSeconds >= 1,
-            "TMAIVesting: slicePeriodSeconds must be >= 1"
+            _slicePeriodSeconds >= 1 && _slicePeriodSeconds <= 365 days,
+            "TMAIVesting: slicePeriodSeconds must be >= 1 and <= 365 days"
+        );
+        require(
+            _cliff < _duration,
+            "TMAIVesting: cliff must be less than duration"
         );
 
         // Calculate the initial release amount
@@ -285,6 +290,9 @@ contract TMAIVesting is
         if (_initialRelease > 0) {
             _token.safeTransfer(_beneficiary, _initialRelease);
         }
+
+        // Emit an event for the creation of a new vesting schedule
+        emit VestingScheduleCreated(_beneficiary, vestingScheduleId, _amount);
     }
 
     /**
