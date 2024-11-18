@@ -124,10 +124,17 @@ contract TMAISoulboundNFT is
         PlanDetails storage plan = tokenIdToPlanDetails[tokenId];
         require(!_isExpired(tokenId), "Cannot upgrade an expired NFT");
 
-        plan.planType = newPlanType;
-        plan.expiryDate = block.timestamp + newDuration;
+        // Check for redundant upgrade
+        uint256 newExpiryDate = block.timestamp + newDuration;
+        require(
+            plan.planType != newPlanType || plan.expiryDate != newExpiryDate,
+            "Redundant upgrade: new values are the same as existing"
+        );
 
-        emit SubscriptionUpgraded(tokenId, newPlanType, plan.expiryDate);
+        plan.planType = newPlanType;
+        plan.expiryDate = newExpiryDate;
+
+        emit SubscriptionUpgraded(tokenId, newPlanType, newExpiryDate);
     }
 
     // Set the base URI for constructing token URIs
