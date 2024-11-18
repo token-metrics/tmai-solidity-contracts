@@ -24,6 +24,8 @@ contract TMAISoulboundNFT is
     mapping(address => mapping(string => uint256)) public userToTokenId; // user -> section -> tokenId
     mapping(uint256 => PlanDetails) public tokenIdToPlanDetails;
 
+    uint256 public totalNFTsInCirculation; // New variable to track NFTs in circulation
+
     event SubscriptionCreated(
         address indexed user,
         uint256 tokenId,
@@ -66,6 +68,7 @@ contract TMAISoulboundNFT is
         if (existingTokenId !=0 && _isExpired(existingTokenId)) {
             _burn(existingTokenId);
             emit SubscriptionBurned(existingTokenId, to);
+            totalNFTsInCirculation--; // Decrement on burn
         }
 
         _tokenIdCounter += 1;
@@ -73,6 +76,7 @@ contract TMAISoulboundNFT is
         uint256 expiryDate = block.timestamp + duration;
 
         _mint(to, tokenId);
+        totalNFTsInCirculation++; // Increment on mint
 
         PlanDetails memory plan = PlanDetails({
             section: section,
@@ -95,6 +99,7 @@ contract TMAISoulboundNFT is
         delete userToTokenId[owner][section];
 
         emit SubscriptionBurned(tokenId, owner);
+        totalNFTsInCirculation--; // Decrement on burn
     }
 
     // Upgrade an NFT's plan details (planType and expiryDate)

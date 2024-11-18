@@ -32,7 +32,9 @@ describe("TMAISoulboundNFT", function () {
   });
 
   describe("Minting and Burning NFTs", function () {
-    it("Should mint a new NFT", async function () {
+    it("Should mint a new NFT and update circulation count", async function () {
+      const initialCirculation = await soulboundNFT.totalNFTsInCirculation();
+
       await soulboundNFT.connect(minter).mint(addr1.address, "analytics", "premium", 365 * 24 * 60 * 60); // 1 year
 
       const tokenId = await soulboundNFT.userToTokenId(addr1.address, "analytics");
@@ -40,16 +42,26 @@ describe("TMAISoulboundNFT", function () {
 
       const planDetails = await soulboundNFT.getUserPlanDetails(addr1.address, "analytics");
       expect(planDetails.planType).to.equal("premium");
+
+      const updatedCirculation = await soulboundNFT.totalNFTsInCirculation();
+      expect(updatedCirculation).to.equal(initialCirculation + BigInt(1)); // Check increment
     });
 
-    it("Should burn an existing NFT", async function () {
+    it("Should burn an existing NFT and update circulation count", async function () {
+      const initialCirculation = await soulboundNFT.totalNFTsInCirculation();
+
       const tokenId = await soulboundNFT.userToTokenId(addr1.address, "analytics");
       await soulboundNFT.connect(owner).burn(tokenId);
 
       await expect(soulboundNFT.ownerOf(tokenId)).to.be.revertedWith("ERC721: invalid token ID");
+
+      const updatedCirculation = await soulboundNFT.totalNFTsInCirculation();
+      expect(updatedCirculation).to.equal(initialCirculation - BigInt(1)); // Check decrement
     });
 
-    it("Should mint a new NFT after burning the old one", async function () {
+    it("Should mint a new NFT after burning the old one and update circulation count", async function () {
+      const initialCirculation = await soulboundNFT.totalNFTsInCirculation();
+
       await soulboundNFT.connect(minter).mint(addr1.address, "analytics", "basic", 30 * 24 * 60 * 60); // 1 month
 
       const tokenId = await soulboundNFT.userToTokenId(addr1.address, "analytics");
@@ -57,6 +69,9 @@ describe("TMAISoulboundNFT", function () {
 
       const planDetails = await soulboundNFT.getUserPlanDetails(addr1.address, "analytics");
       expect(planDetails.planType).to.equal("basic");
+
+      const updatedCirculation = await soulboundNFT.totalNFTsInCirculation();
+      expect(updatedCirculation).to.equal(initialCirculation + BigInt(1)); // Check increment
     });
   });
 
