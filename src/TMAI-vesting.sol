@@ -54,6 +54,8 @@ contract TMAIVesting is
     event Released(address indexed user, uint256 indexed amount);
     event Revoked(address indexed user, bytes32 indexed vestingId);
 
+    uint256 constant MAX_ARRAY_LENGTH = 100; // Define an upper bound for array lengths
+
     /**
      * @dev Reverts if the vesting schedule does not exist or has been revoked.
      */
@@ -142,6 +144,11 @@ contract TMAIVesting is
             recipients.length == values.length,
             "Arrays must be the same length"
         );
+        require(
+            recipients.length <= MAX_ARRAY_LENGTH,
+            "Array length exceeds maximum allowed"
+        );
+
         uint256 total = 0;
         for (uint256 i = 0; i < recipients.length; i++) {
             total = total + values[i];
@@ -177,6 +184,11 @@ contract TMAIVesting is
             _to.length == _amount.length && _to.length == _initialUnlock.length,
             "Invalid data"
         );
+        require(
+            _to.length <= MAX_ARRAY_LENGTH,
+            "Array length exceeds maximum allowed"
+        );
+
         for (uint256 i = 0; i < _to.length; i++) {
             require(_to[i] != address(0), "Invalid address");
             createVestingSchedule(
@@ -474,10 +486,22 @@ contract TMAIVesting is
         return _userVestingScheduleId[_vestingScheduleId];
     }
 
+    /**
+     * @dev Resets the revoke IDs for vesting schedules.
+     */
     function resetRevokeIDs(
         bytes32[] memory _vestingIds,
         uint256[] memory _vestingIndex
     ) external onlyOwner {
+        require(
+            _vestingIds.length == _vestingIndex.length,
+            "Arrays must be the same length"
+        );
+        require(
+            _vestingIds.length <= MAX_ARRAY_LENGTH,
+            "Array length exceeds maximum allowed"
+        );
+
         for (uint256 i = 0; i < _vestingIds.length; i++) {
             _userVestingScheduleId[_vestingIds[i]] = _vestingIndex[i];
         }
