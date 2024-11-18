@@ -21,13 +21,15 @@ contract TMAIToken is
     uint256 public endBlock;
     uint256 public tgeAmount;
 
-    //Keep track of all pairs
+    // Keep track of all pairs
     mapping(address => bool) public pairs;
+    mapping(address => bool) public whitelistedLiquidityProviders;
 
     // Events
     event SetPairAddress(address pair);
     event SetStartBlock(uint256 startBlock);
     event SetSellLimitTime(uint256 blocks);
+    event LiquidityProviderWhitelisted(address provider, bool whitelisted);
 
     function initialize(address _allocationContract) external initializer {
         __ERC20_init("Token Metrics AI", "TMAI");
@@ -56,7 +58,7 @@ contract TMAIToken is
 
     // Add new pair for which we need to implement Antibot check
     function setPairAddress(address _pair) external onlyOwner {
-        require(!pairs[_pair], "Pair already addded");
+        require(!pairs[_pair], "Pair already added");
         pairs[_pair] = true;
         emit SetPairAddress(_pair);
     }
@@ -74,20 +76,28 @@ contract TMAIToken is
         emit SetSellLimitTime(_blocks);
     }
 
-    // Verify of the transfer between pairs address matches the anitbot mechanism condition
+    // Whitelist or remove a liquidity provider
+    function whitelistLiquidityProvider(address provider, bool whitelisted) external onlyOwner {
+        whitelistedLiquidityProviders[provider] = whitelisted;
+        emit LiquidityProviderWhitelisted(provider, whitelisted);
+    }
+
+    // Verify the transfer between pairs address matches the antibot mechanism condition
     function verifyBuySellConditions(
         address from,
         address to,
         uint256 amount
     ) internal view {
         if (pairs[from] || pairs[to]) {
-            require(startBlock < block.number, "Token not available for trade");
-            if (endBlock > block.number) {
-                require(
-                    amount <=
-                        ((block.number - startBlock) * tgeAmount) / blocks,
-                    "Trade amount reached"
-                );
+            if (!whitelistedLiquidityProviders[from] && !whitelistedLiquidityProviders[to]) {
+                require(startBlock < block.number, "Token not available for trade");
+                if (endBlock > block.number) {
+                    require(
+                        amount <=
+                            ((block.number - startBlock) * tgeAmount) / blocks,
+                        "Trade amount reached"
+                    );
+                }
             }
         }
     }
