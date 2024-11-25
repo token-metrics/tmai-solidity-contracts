@@ -5,25 +5,57 @@ require("@nomicfoundation/hardhat-ethers");
 require("@openzeppelin/hardhat-upgrades");
 
 // Testnet
-const { TEST_PRIVATE_KEY} = process.env;
+const { TEST_PRIVATE_KEY } = process.env;
 // Mainnet
-const { DEPLOYER_PRIVATE_KEY, ARBISCAN_API_KEY, ARBITRUM_RPC_URL } = process.env;
+const { DEPLOYER_PRIVATE_KEY, BASE_RPC_URL, BASESCAN_API_KEY } = process.env;
 
 module.exports = {
   defaultNetwork: "hardhat",
   networks: {
     hardhat: {
     },
-    arbitrumOne: {
-      url: ARBITRUM_RPC_URL,
+
+    // Mainnet
+    base: {
+      url: BASE_RPC_URL,
       accounts: [DEPLOYER_PRIVATE_KEY],
     },
+
+    // Testnet
+    baseSepolia: {
+      url: "https://sepolia.base.org",
+      accounts: [TEST_PRIVATE_KEY],
+    },
   },
+
+
   etherscan: {
     apiKey: {
-      arbitrumOne: ARBISCAN_API_KEY,
-    }
+      base: BASESCAN_API_KEY,
+      baseSepolia: BASESCAN_API_KEY,
+    },
+
+    customChains: [
+      {
+        network: "baseSepolia",
+        chainId: 84532,
+        urls: {
+          apiURL: "https://api-sepolia.basescan.org/api",
+          browserURL: "https://sepolia.basescan.org/",
+        },
+      },
+      {
+        network: "base",
+        chainId: 8453,
+        urls: {
+          apiURL: "https://api.basescan.org/api",
+          browserURL: "https://basescan.org/",
+        },
+      },
+    ],
   },
+
+
   solidity: {
     compilers: [
       {
@@ -37,6 +69,8 @@ module.exports = {
       }
     ],
   },
+
+
   paths: {
     sources: "./src",
     tests: "./test/hardhat",
