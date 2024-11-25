@@ -132,7 +132,7 @@ contract GovernorAlpha is Initializable {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
         require(
-            quorumPercentage <= 100 && quorumPercentage > 0,
+            _quorumPercentage <= 100 && _quorumPercentage > 0,
             "Invalid quorum percentage"
         );
         require(_baseStableCoin != address(0), "Zero Address");
