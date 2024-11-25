@@ -46,6 +46,7 @@ contract TMAISoulboundNFT is
         uint256 newExpiryDate
     );
     event MinterRoleGranted(address account);
+    event MinterRoleRevoked(address account);
 
     // Define valid plan types
     enum PlanType {
@@ -196,6 +197,13 @@ contract TMAISoulboundNFT is
     function grantMinterRole(address account) external onlyOwner {
         minter = account;
         emit MinterRoleGranted(account);
+    }
+
+    function revokeMinterRole() external onlyOwner {
+        require(minter != address(0), "Minter role is already revoked");
+        address previousMinter = minter;
+        minter = address(0);
+        emit MinterRoleRevoked(previousMinter);
     }
 
     // Prevent transfers by anyone other than the owner (contract owner)
