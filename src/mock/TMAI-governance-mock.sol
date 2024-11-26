@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "../interface/ITimelock.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-// import "@arbitrum/nitro-contracts/src/precompiles/ArbSys.sol";
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "../utils/SignatureVerifier.sol";
 
@@ -14,15 +12,9 @@ import "../utils/SignatureVerifier.sol";
  * @dev This contract allows the community to create proposals and vote on them to govern the system. Proposals require a minimum TMAI holding to be created, and votes determine the outcome based on quorum and majority thresholds.
  */
 contract GovernorAlphaMock is Initializable {
-    using SafeMathUpgradeable for uint256;
     using SafeERC20 for IERC20;
-
     /// @notice Contract name
     string public constant name = "Token Metrics Governor Alpha";
-
-    // /// @notice Precompile address for Arbitrum's ArbSys contract
-    // address public constant ARBSYS_ADDRESS =
-    //     0x0000000000000000000000000000000000000064;
 
     uint256 public votingPeriod; // ~7 days in blocks
     uint256 public blocksPerDay; // Number of blocks per day
@@ -105,12 +97,6 @@ contract GovernorAlphaMock is Initializable {
         bool support,
         uint256 votes
     );
-    event VoteChanged(
-        address voter,
-        uint256 proposalId,
-        bool support,
-        uint256 votes
-    );
     event ProposalCanceled(uint256 id);
     event ProposalQueued(uint256 id, uint256 eta);
     event ProposalExecuted(uint256 id);
@@ -121,6 +107,10 @@ contract GovernorAlphaMock is Initializable {
         address revenueShareReceiver,
         uint256 revenueShareAmount
     );
+    event MinProposalTimeIntervalSecUpdated(uint256 newInterval);
+    event VotingPeriodUpdated(uint256 newPeriod);
+    event AdminUpdated(address newAdmin);
+    event QuorumValueUpdated(uint256 newQuorum);
 
     /**
      * @notice Initialize the contract with necessary parameters
@@ -141,6 +131,12 @@ contract GovernorAlphaMock is Initializable {
     ) external initializer {
         require(timelock_ != address(0), "Zero Address");
         require(TMAI_ != address(0), "Zero Address");
+        require(
+            _quorumPercentage <= 100 && _quorumPercentage > 0,
+            "Invalid quorum percentage"
+        );
+        require(_baseStableCoin != address(0), "Zero Address");
+
         timelock = TimelockInterface(timelock_);
         TMAI = IERC20(TMAI_);
         minProposalTMAIHolding = 50000000e18;
@@ -168,8 +164,13 @@ contract GovernorAlphaMock is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(quorumPercentage <= 100, "Invalid quorum percentage");
+        require(
+            quorumPercentage <= 100 && quorumPercentage > 0,
+            "Invalid quorum percentage"
+        );
+
         quorumPercentage = _quorumPercentage;
+        emit QuorumValueUpdated(_quorumPercentage);
     }
 
     /**
@@ -179,7 +180,9 @@ contract GovernorAlphaMock is Initializable {
      */
     function updateAdmin(address _admin) external {
         require(msg.sender == admin, "Call must come from Admin.");
+        require(_admin != address(0), "Zero Address");
         admin = _admin;
+        emit AdminUpdated(_admin);
     }
 
     /**
@@ -193,6 +196,7 @@ contract GovernorAlphaMock is Initializable {
             "Call must come from Timelock."
         );
         votingPeriod = _votingPeriod;
+        emit VotingPeriodUpdated(_votingPeriod);
     }
 
     /**
@@ -208,6 +212,7 @@ contract GovernorAlphaMock is Initializable {
             "Call must come from Timelock."
         );
         minProposalTimeIntervalSec = _minProposalTimeIntervalSec;
+        emit MinProposalTimeIntervalSecUpdated(_minProposalTimeIntervalSec);
     }
 
     /**
@@ -263,7 +268,10 @@ contract GovernorAlphaMock is Initializable {
             msg.sender == address(timelock),
             "Call must come from Timelock."
         );
-        require(_totalTarget <= 10, "Target count too high");
+        require(
+            _totalTarget <= 10 && _totalTarget > 0,
+            "Target count should be greater than 0 and less than or equal to 10"
+        );
         totalTarget = _totalTarget;
     }
 
@@ -339,9 +347,7 @@ contract GovernorAlphaMock is Initializable {
         bytes[] memory calldatas,
         string memory description
     ) internal returns (uint256) {
-        // uint256 startBlock = ArbSys(ARBSYS_ADDRESS).arbBlockNumber() +
-        //     votingDelay;
-        uint startBlock = block.number + votingDelay;
+        uint256 startBlock = block.number + votingDelay;
         uint256 endBlock = startBlock + votingPeriod;
 
         proposalCount++;
@@ -355,9 +361,7 @@ contract GovernorAlphaMock is Initializable {
         newProposal.signatures = signatures;
         newProposal.calldatas = calldatas;
 
-        // proposalCreatedTime[proposalCount] = ArbSys(ARBSYS_ADDRESS)
-        //     .arbBlockNumber();
-        proposalCreatedTime[proposalCount] = block.number;
+        proposalCreatedTime[proposalCount] = block.timestamp;
         latestProposalIds[msg.sender] = newProposal.id;
         lastProposalTimeIntervalSec = block.timestamp;
 
@@ -451,6 +455,7 @@ contract GovernorAlphaMock is Initializable {
     function cancel(uint256 proposalId) external {
         ProposalState _state = state(proposalId);
         require(_state != ProposalState.Executed, "Proposal already executed");
+        require(_state != ProposalState.Canceled, "Proposal already canceled");
 
         Proposal storage proposal = proposals[proposalId];
         require(msg.sender == proposal.proposer, "Only proposer can cancel");
@@ -527,7 +532,6 @@ contract GovernorAlphaMock is Initializable {
         return proposals[proposalId].receipts[_voter].hasVoted;
     }
 
-    
     /**
      * @notice Get the state of a proposal
      * @param proposalId The ID of the proposal
@@ -563,14 +567,12 @@ contract GovernorAlphaMock is Initializable {
 
         // Check if the proposal failed to meet the quorum or the YES vote threshold
         uint256 requiredQuorum = quorumVotes();
-        uint256 requiredYesPercentage = proposal
-            .againstVotes
-            .mul(yesVoteThresholdPercentage)
-            .div(100);
+        uint256 requiredYesPercentage = (proposal.againstVotes *
+            yesVoteThresholdPercentage) / 100;
 
         if (
             proposal.totalVoters < requiredQuorum ||
-            proposal.forVotes < proposal.againstVotes.add(requiredYesPercentage)
+            proposal.forVotes < proposal.againstVotes + requiredYesPercentage
         ) {
             return ProposalState.Defeated;
         }
@@ -591,13 +593,12 @@ contract GovernorAlphaMock is Initializable {
         return ProposalState.Queued;
     }
 
-
     /**
      * @dev Calculate the minimum number of votes required to reach quorum
      * @return The number of votes required to reach quorum
      */
     function quorumVotes() public view returns (uint256) {
-        return totalTokenHolders.mul(quorumPercentage).div(100);
+        return (totalTokenHolders * quorumPercentage) / 100;
     }
 
     /**
@@ -642,34 +643,17 @@ contract GovernorAlphaMock is Initializable {
         Receipt storage receipt = proposal.receipts[voter];
 
         // Cast vote if the voter hasn't voted yet
-        if (!receipt.hasVoted) {
-            if (support) {
-                proposal.forVotes += averageBalance;
-            } else {
-                proposal.againstVotes += averageBalance;
-            }
-            proposal.totalVoters++;
-            receipt.hasVoted = true;
-            receipt.support = support;
-            receipt.votes = averageBalance;
-            emit VoteCast(voter, proposalId, support, averageBalance);
+        require(!receipt.hasVoted, "User has already voted");
+        if (support) {
+            proposal.forVotes += averageBalance;
         } else {
-            // Change the vote if it's different from the previous vote
-            require(
-                support != receipt.support,
-                "GovernorAlpha::_castVote: voter already voted"
-            );
-            if (support) {
-                proposal.againstVotes -= receipt.votes;
-                proposal.forVotes += averageBalance;
-            } else {
-                proposal.forVotes -= receipt.votes;
-                proposal.againstVotes += averageBalance;
-            }
-            receipt.support = support;
-            receipt.votes = averageBalance;
-            emit VoteChanged(voter, proposalId, support, averageBalance);
+            proposal.againstVotes += averageBalance;
         }
+        proposal.totalVoters++;
+        receipt.hasVoted = true;
+        receipt.support = support;
+        receipt.votes = averageBalance;
+        emit VoteCast(voter, proposalId, support, averageBalance);
     }
 
     /**
@@ -684,10 +668,8 @@ contract GovernorAlphaMock is Initializable {
         require(msg.sender == admin, "Only admin can distribute revenue");
         uint256 revenue = IERC20(baseStableCoin).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
-        uint256 buyBackandBurnAmount = revenue.mul(buybackAndBurnPercent).div(
-            100
-        );
-        uint256 revenueShareAmount = revenue.sub(buyBackandBurnAmount);
+        uint256 buyBackandBurnAmount = (revenue * buybackAndBurnPercent) / 100;
+        uint256 revenueShareAmount = revenue - buyBackandBurnAmount;
         IERC20(baseStableCoin).safeTransfer(
             receiverBuyBackandBurn,
             buyBackandBurnAmount
