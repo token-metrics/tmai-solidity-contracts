@@ -1,13 +1,13 @@
 require("dotenv").config();
 require("@nomicfoundation/hardhat-chai-matchers");
-require("@nomiclabs/hardhat-etherscan");
+require("@nomicfoundation/hardhat-verify");
 require("@nomicfoundation/hardhat-ethers");
 require("@openzeppelin/hardhat-upgrades");
 
 // Testnet
 const { TEST_PRIVATE_KEY } = process.env;
 // Mainnet
-const { DEPLOYER_PRIVATE_KEY, BASE_RPC_URL, BASESCAN_API_KEY } = process.env;
+const { DEPLOYER_PRIVATE_KEY, BASE_RPC_URL, BASESCAN_API_KEY, SEPOLIA_RPC_URL, ETHERSCAN_API_KEY } = process.env;
 
 module.exports = {
   defaultNetwork: "hardhat",
@@ -22,6 +22,10 @@ module.exports = {
     },
 
     // Testnet
+    sepolia: {
+      url: SEPOLIA_RPC_URL,
+      accounts: [TEST_PRIVATE_KEY],
+    },
     baseSepolia: {
       url: "https://sepolia.base.org",
       accounts: [TEST_PRIVATE_KEY],
@@ -33,6 +37,7 @@ module.exports = {
     apiKey: {
       base: BASESCAN_API_KEY,
       baseSepolia: BASESCAN_API_KEY,
+      sepolia: ETHERSCAN_API_KEY,
     },
 
     customChains: [
@@ -59,7 +64,7 @@ module.exports = {
   solidity: {
     compilers: [
       {
-        version: "0.8.2",
+        version: "0.8.20",
         settings: {
           optimizer: {
             enabled: true,
