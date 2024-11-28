@@ -13,6 +13,7 @@ describe("TMAIPayment", function () {
         Advanced: 1,
         Premium: 2,
         VIP: 3,
+        Enterprise: 4,
     };
 
     const Product = {
@@ -20,6 +21,7 @@ describe("TMAIPayment", function () {
         DataAPI: 1,
         AnalyticsPlatform: 2,
     };
+
 
 
     describe("Deployment", function () {

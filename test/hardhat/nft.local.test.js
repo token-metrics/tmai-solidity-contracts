@@ -14,6 +14,7 @@ describe("TMAISoulboundNFT", function () {
     Advanced: 1,
     Premium: 2,
     VIP: 3,
+    Enterprise: 4,
   };
 
   const Product = {
