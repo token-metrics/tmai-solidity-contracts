@@ -1,7 +1,6 @@
-// SPDX-License-Identifier: BUSL-1.1
-pragma solidity ^0.8.2;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts-upgradeable/utils/math/SafeMathUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
@@ -11,8 +10,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "./interface/ITMAISoulboundNFT.sol";
 import "./utils/SignatureVerifier.sol";
 
-contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
-    using SafeMathUpgradeable for uint256;
+contract TMAIPayment is
+    Initializable,
+    Ownable2StepUpgradeable,
+    PausableUpgradeable
+{
     using SafeERC20Upgradeable for IERC20Upgradeable;
 
     address public treasury;
@@ -22,6 +24,7 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     SignatureVerifier public signatureVerifier; // Address of the SignatureVerifier contract
 
     mapping(address => bool) public allowedTokens; // Mapping to track allowed payment tokens
+    mapping(address => uint256) public nonces; // Track each user’s transaction count
 
     event RevenueDistributed(
         uint256 revenue,
@@ -31,18 +34,21 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     event TokensWithdrawn(address token, address to, uint256 amount);
     event SubscriptionCreated(
         address indexed user,
-        string section,
-        string planType,
+        uint8 section,
+        uint8 planType,
         uint256 expiryDate
     );
     event SubscriptionUpgraded(
         address indexed user,
-        string section,
-        string newPlanType,
+        uint8 section,
+        uint8 newPlanType,
         uint256 newExpiryDate
     );
     event TokenEnabled(address token);
     event TokenDisabled(address token);
+    event DAOShareUpdated(uint256 newShare);
+    event DAOUpdated(address newDAO);
+    event TreasuryUpdated(address newTreasury);
 
     // Initialize contract with required addresses
     function initialize(
@@ -65,9 +71,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             _signatureVerifier != address(0),
             "Signature verifier address cannot be zero address"
         );
-        require(_daoShare <= 10000, "DAO Share cannot be greater than 10000");
+        require(
+            _daoShare <= 10000,
+            "DAO Share cannot be greater than 100 percent"
+        );
 
         __Ownable2Step_init();
+        __Pausable_init();
         treasury = _treasury;
         dao = _dao;
         daoShare = _daoShare;
@@ -79,9 +89,12 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     function processPayment(
         SignatureVerifier.Signature memory signature,
         bool isUpgrade
-    ) external {
-        SignatureVerifier.EncodedMessage memory message = signatureVerifier
-            .verifySignature(signature);
+    ) external whenNotPaused {
+        SignatureVerifier.PaymentMessage memory message = signatureVerifier
+            .verifyPaymentSignature(signature);
+
+        // Ensure the nonce matches the current nonce for the user
+        require(message.nonce == nonces[message.userAddress], "Invalid nonce");
 
         // Ensure the token is allowed for payments
         require(allowedTokens[message.token], "Token not allowed");
@@ -100,13 +113,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             // Upgrade the existing subscription
             ITMAISoulboundNFT(nftContract).upgradeNFT(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
             emit SubscriptionUpgraded(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
@@ -114,17 +127,20 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
             // Create a new subscription
             ITMAISoulboundNFT(nftContract).mint(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
             emit SubscriptionCreated(
                 message.userAddress,
-                message.section,
+                message.product,
                 message.planType,
                 message.expiryDate
             );
         }
+
+        // Increment nonce after successful processing
+        nonces[message.userAddress]++;
     }
 
     // Distribute revenue from payments to treasury and DAO
@@ -132,8 +148,8 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         uint256 revenue = IERC20Upgradeable(token).balanceOf(address(this));
         require(revenue > 0, "No revenue to distribute");
 
-        uint256 daoAmount = revenue.mul(daoShare).div(10000);
-        uint256 treasuryAmount = revenue.sub(daoAmount);
+        uint256 daoAmount = (revenue * daoShare) / 10000;
+        uint256 treasuryAmount = revenue - daoAmount;
 
         IERC20Upgradeable(token).safeTransfer(dao, daoAmount);
         IERC20Upgradeable(token).safeTransfer(treasury, treasuryAmount);
@@ -142,9 +158,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     }
 
     // Update DAO share
-    function updateDAOShare(uint256 _share) public onlyOwner {
-        require(_share <= 10000, "DAO share cannot be greater than 10000");
-        daoShare = _share;
+    function updateDAOShare(uint256 newShare) external onlyOwner {
+        require(
+            newShare <= 10000,
+            "DAO share cannot be greater than 100 percent"
+        );
+        daoShare = newShare;
+        emit DAOShareUpdated(newShare);
     }
 
     // Withdraw tokens from the contract
@@ -155,18 +175,20 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
     }
 
     // Update DAO address
-    function updateDAO(address _dao) public onlyOwner {
-        require(_dao != address(0), "DAO address cannot be zero address");
-        dao = _dao;
+    function updateDAO(address newDAO) external onlyOwner {
+        require(newDAO != address(0), "DAO address cannot be zero address");
+        dao = newDAO;
+        emit DAOUpdated(newDAO);
     }
 
     // Update Treasury address
-    function updateTreasury(address _treasury) public onlyOwner {
+    function updateTreasury(address newTreasury) external onlyOwner {
         require(
-            _treasury != address(0),
+            newTreasury != address(0),
             "Treasury address cannot be zero address"
         );
-        treasury = _treasury;
+        treasury = newTreasury;
+        emit TreasuryUpdated(newTreasury);
     }
 
     // Allow updating the SignatureVerifier contract address
@@ -192,5 +214,13 @@ contract TMAIPayment is Initializable, Ownable2StepUpgradeable {
         require(token != address(0), "Token address cannot be zero address");
         allowedTokens[token] = false;
         emit TokenDisabled(token);
+    }
+
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }

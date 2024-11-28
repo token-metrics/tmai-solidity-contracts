@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.2;
+pragma solidity ^0.8.20;
 
 interface ITMAISoulboundNFT {
     function mint(
         address to,
-        string memory section,
-        string memory planType,
+        uint8 section,
+        uint8 planType,
         uint256 duration
     ) external;
 
@@ -13,8 +13,8 @@ interface ITMAISoulboundNFT {
 
     function upgradeNFT(
         address user,
-        string memory section,
-        string memory newPlanType,
+        uint8 section,
+        uint8 newPlanType,
         uint256 newDuration
     ) external;
 }

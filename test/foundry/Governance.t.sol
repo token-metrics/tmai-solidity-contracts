@@ -1,33 +1,39 @@
 // SPDX-License-Identifier: BUSL-1.1
-pragma solidity 0.8.19;
+pragma solidity ^0.8.2;
 
 import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../../src/TMAI-timelock.sol";
-import "../../src/mock/TMAI-staking-mock.sol";
-import "../../src/TMAI-Token.sol";
+import "../../src/TMAI-token.sol";
 import "../../src/mock/ERC20Mock.sol";
 import "../../src/mock/TMAI-governance-mock.sol";
+import "../../src/utils/SignatureVerifier.sol";
 // import "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol";
 // import "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol";
 
 contract GovernanceTest is Test {
-    GovernorAlpha public governance;
+    GovernorAlphaMock public governance;
     TMAIToken public tmai;
-    TMAIStakingMock public staking;
     ERC20Mock public lp;
     ERC20Mock public weth;
     ERC20Mock public usdc;
     Timelock public timelock;
+    SignatureVerifier public signatureVerifier; 
     address public owner = address(this);
     address public user1 = address(1);
     address public user2 = address(2);
+    uint256 public signerpvtKey = 123;
+    address public signerpubkey = vm.addr(signerpvtKey);
+
+    // address public signer = address(3);
     // Parameters for a proposal 
     address[] public targets;
     uint256[] public values;
     string[] public signatures;
     bytes[] public calldatas;
     string public description;
+    uint public quorumPercentage;
+    uint public yesVoteThreshold;
 
 
     /// @notice Possible states that a proposal may be in
@@ -48,6 +54,9 @@ contract GovernanceTest is Test {
         usdc = new ERC20Mock("USDC Coin", "USDC", 1000000000000000000000000000);
         tmai = new TMAIToken();
         tmai.initialize(address(this));
+        yesVoteThreshold = 10;
+        quorumPercentage = 25;
+
 
         // // AxelarGasSerive contract on L1
         // address gasService = address(0x013459EC3E8Aeced878C5C4bFfe126A366cd19E9);
@@ -55,30 +64,16 @@ contract GovernanceTest is Test {
         // address axelarGateway = address(0x28f8B50E1Be6152da35e923602a2641491E71Ed8);
 
         timelock = new Timelock(address(this), 120);
-
-
-        staking = new TMAIStakingMock();
-        staking.initialize(tmai, 243457567, 243467567, 1000000);
-        governance = new GovernorAlpha();
-        governance.initialize(address(timelock), address(tmai), address(staking), address(usdc));
-        staking.whitelistDepositContract(address(governance), true);
+        signatureVerifier = new SignatureVerifier();
+        signatureVerifier.initialize(signerpubkey);
+        governance = new GovernorAlphaMock();
+        governance.initialize(address(timelock), address(tmai), address(usdc), address(signatureVerifier), quorumPercentage, yesVoteThreshold);
+  
         //Configure tmai contract
         tmai.transfer(user1, 10000000 * (10**18));
-        tmai.transfer(user2, 10000000 * (10**18));
+        tmai.transfer(user2, 1000 * (10**18));
         timelock.setPendingAdmin(address(governance));
         governance._acceptAdmin();
-        tmai.approve(address(staking), 1000000000 * (10**18));
-        staking.deposit(100 * (10**18), 0, false);
-        staking.deposit(100000000 * (10**18), 0, false);
-        vm.prank(user1);
-        tmai.approve(address(staking), 1000000000 * (10**18));
-        vm.prank(user1);
-        staking.deposit(10000000 * (10**18), 0, false);
-        vm.prank(user2);
-        tmai.approve(address(staking), 1000000000 * (10**18));
-        vm.prank(user2);
-        staking.deposit(10000000 * (10**18), 0, false);
-
     }
 
     function testCreatePropose() public {
@@ -91,7 +86,6 @@ contract GovernanceTest is Test {
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        //console.log(staking.getLevelForUser(address(this)));
         governance.propose(targets, values, signatures, calldatas, description);
         assertEq(governance.proposalCount(), 1);
     }
@@ -107,7 +101,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + 1 days);
         vm.warp(36 days);
         governance.propose( targets, values, signatures, calldatas, description);
-        vm.expectRevert(bytes("GovernorAlpha::propose: Only one proposal can be create in one day"));
+        vm.expectRevert(bytes("Proposal too soon"));
         governance.propose( targets, values, signatures, calldatas, description);
     }
 
@@ -120,7 +114,7 @@ contract GovernanceTest is Test {
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        vm.expectRevert(bytes("GovernorAlpha::propose: proposal function information arity mismatch"));
+        vm.expectRevert(bytes("Invalid input lengths"));
         governance.propose(targets, values, signatures, calldatas, description);
     }
 
@@ -128,7 +122,7 @@ contract GovernanceTest is Test {
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
-        vm.expectRevert(bytes("GovernorAlpha::propose: must provide actions"));
+        vm.expectRevert(bytes("Must provide actions"));
         governance.propose(targets, values, signatures, calldatas, description);
     }
 
@@ -144,7 +138,7 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose( targets, values, signatures, calldatas, description);
         vm.warp(block.timestamp + 2 days);
-        vm.expectRevert(bytes("GovernorAlpha::propose: one live proposal per proposer, found an already pending proposal"));
+        vm.expectRevert(bytes("Active or pending proposal exists"));
         governance.propose( targets, values, signatures, calldatas, description);
     }
 
@@ -157,7 +151,8 @@ contract GovernanceTest is Test {
         description = "Description";
         tmai.approve(address(governance), 1000000000000000000000000000000);
         vm.warp(block.timestamp + 1 days);
-        vm.expectRevert(bytes("User Level is less than 4"));
+        vm.prank(user2);
+        vm.expectRevert(bytes("Insufficient TMAI holdings"));
         governance.propose( targets, values, signatures, calldatas, description);
     }
 
@@ -173,7 +168,35 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
+
+
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 100;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
     }
 
     function testVoteChange() public {
@@ -187,9 +210,59 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
-        //vm.expectRevert(bytes("GovernorAlpha::_castVote: voter already voted"));
-        governance.castVote(1, false);
+
+                uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 100;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
+
+        support = false;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        messageHash = keccak256(encodedMessage);
+        ethmessagehash = getEthSignedMessageHash(messageHash);
+        (v, r,  s) = vm.sign(signerpvtKey, ethmessagehash);
+        signature = abi.encodePacked(r, s, v);
+        sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
     }
 
     
@@ -204,8 +277,35 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.warp(15 days);
+
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 100;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
         vm.expectRevert(bytes("GovernorAlpha::_castVote: voting is closed"));
-        governance.castVote(1, true);
+        governance.castVote(sig);
     }
 
     function testVoteFailVoterVoted() public {
@@ -219,9 +319,36 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
+        
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 100;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
         vm.expectRevert(bytes("GovernorAlpha::_castVote: voter already voted"));
-        governance.castVote(1, true);
+        governance.castVote(sig);
     }
 
     function testQueue() public {
@@ -231,29 +358,39 @@ contract GovernanceTest is Test {
         calldatas.push(abi.encode(120));
         description = "Description";
         address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
-
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
+
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
-
-            vm.stopPrank();
-
-        } 
         vm.roll(2016501);
         console.log(uint(governance.state(1)));
         // (,uint256 governors) = governance.votersInfo(1);
@@ -273,7 +410,7 @@ contract GovernanceTest is Test {
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);  
-        vm.expectRevert(bytes("GovernorAlpha::queue: proposal can only be queued if it is succeeded"));
+        vm.expectRevert(bytes("Proposal not succeeded"));
         governance.queue(1);
 
     }
@@ -284,33 +421,43 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
-
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
 
-        vm.expectRevert(bytes("GovernorAlpha::execute: proposal can only be executed if it is queued"));
+        vm.expectRevert(bytes("Proposal not queued"));
         governance.execute(1);
 
     }
@@ -321,30 +468,41 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
 
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         governance.queue(1);
         vm.expectRevert(bytes("Timelock::executeTransaction: Transaction hasn't surpassed time lock."));
@@ -358,30 +516,41 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
-
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
+ 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         governance.queue(1);
         vm.warp(block.timestamp + 1 days + 1150);
@@ -402,7 +571,34 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 100;
+        uint256 validity = block.number + 10;
+
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
+
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         assertEq(uint(governance.state(1)), 3);
 
@@ -414,35 +610,45 @@ contract GovernanceTest is Test {
         signatures.push("updateMinProposalTimeIntervalSec(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
-
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
+    
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         governance.queue(1);
         vm.warp(block.timestamp + 1 days + 1150);
         governance.execute(1);
-        vm.expectRevert(bytes("GovernorAlpha::cancel: cannot cancel executed proposal"));
+        vm.expectRevert(bytes("Proposal already executed"));
         governance.cancel(1);
 
     }
@@ -458,9 +664,9 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
+        
         vm.prank(user1);
-        vm.expectRevert(bytes("GovernorAlpha::cancel: Only creator can cancel"));
+        vm.expectRevert(bytes("Only proposer can cancel"));
         governance.cancel(1);
     }
 
@@ -475,7 +681,6 @@ contract GovernanceTest is Test {
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
-        governance.castVote(1, true);
         governance.cancel(1);
         assertEq(uint(governance.state(1)), 2);
     }
@@ -486,35 +691,44 @@ contract GovernanceTest is Test {
         signatures.push("updateRevenueSharePercent(uint256)");
         calldatas.push(abi.encode(20));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
 
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         governance.queue(1);
         vm.warp(block.timestamp + 1 days + 1150);
         governance.execute(1);
-        assertEq(uint(governance.state(1)), 7);
         assertEq(governance.revenueSharePercent(), 20);
     }
 
@@ -524,30 +738,40 @@ contract GovernanceTest is Test {
         signatures.push("updateRevenueSharePercent(uint256)");
         calldatas.push(abi.encode(120));
         description = "Description";
-        address user = address(0);
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            tmai.transfer(user, 100000 * (10**18));
-            vm.startPrank(user);
-
-            tmai.approve(address(staking), 1000000000 * (10**18));
-            staking.deposit(10000 * (10**18), 0, false);
-            vm.stopPrank();
-
-        } 
+        
         vm.warp(block.timestamp + 1 days);
         vm.warp(365 days);
         governance.propose(targets, values, signatures, calldatas, description);
         vm.roll(3);
         
-        for( uint160 i = 1; i <= 33;i++) {
-            user = address(i);
-            vm.startPrank(user);
-            governance.castVote(1, true);
+        uint256 proposalId = 1;
+        uint256 averageBalance = 1000 * 10 ** 18;
+        bool support = true;
+        uint256 totalTokenHolders = 1;
+        uint256 validity = block.number + 10;
 
-            vm.stopPrank();
+        // Encode the message (equivalent to `encodeAbiParameters`)
+        bytes memory encodedMessage = abi.encode(
+            signerpubkey,
+            proposalId,
+            averageBalance,
+            support,
+            totalTokenHolders,
+            validity
+        );
 
-        } 
+        bytes32  messageHash = keccak256(encodedMessage);
+        bytes32 ethmessagehash = getEthSignedMessageHash(messageHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerpvtKey, ethmessagehash);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        SignatureVerifier.Signature memory sig =  SignatureVerifier.Signature({
+            encodedMessage: encodedMessage,
+            messageHash: messageHash,
+            signature: signature
+        });
+
+        governance.castVote(sig);
+
         vm.roll(2016501);
         governance.queue(1);
         vm.warp(block.timestamp + 1 days + 1150);
@@ -571,7 +795,7 @@ contract GovernanceTest is Test {
         assertEq(usdc.balanceOf(user1), 0);
         assertEq(usdc.balanceOf(user2), 0);
         vm.prank(user1);
-        vm.expectRevert("Call must come from Admin.");
+        vm.expectRevert("Only admin can distribute revenue");
         governance.distributeRevenue(user1, user2);
 
     }
@@ -579,10 +803,24 @@ contract GovernanceTest is Test {
     function testDistributeRevenueFailNoRevenueToDistribute() public {
         assertEq(usdc.balanceOf(user1), 0);
         assertEq(usdc.balanceOf(user2), 0);
-        vm.expectRevert("No Revenue to distribute");
+        vm.expectRevert("No revenue to distribute");
         governance.distributeRevenue(user1, user2);
 
     }
+
+
+    function getEthSignedMessageHash(
+        bytes32 _messageHash
+    ) internal pure returns (bytes32) {
+        return
+            keccak256(
+                abi.encodePacked(
+                    "\x19Ethereum Signed Message:\n32",
+                    _messageHash
+                )
+            );
+    }
+
 
 
 
