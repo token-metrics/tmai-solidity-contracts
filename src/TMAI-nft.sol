@@ -53,7 +53,8 @@ contract TMAISoulboundNFT is
         Basic,
         Advanced,
         Premium,
-        VIP
+        VIP,
+        Enterprise
     }
 
     // Define valid products
@@ -191,7 +192,7 @@ contract TMAISoulboundNFT is
         string memory product = uint256(plan.product).toString();
         string memory planType = uint256(plan.planType).toString();
 
-        return string(abi.encodePacked(baseURI, product, "/", planType));
+        return string(abi.encodePacked(baseURI, product, "/", planType, ".json"));
     }
 
     function grantMinterRole(address account) external onlyOwner {
