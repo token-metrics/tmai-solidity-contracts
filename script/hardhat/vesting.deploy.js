@@ -5,7 +5,7 @@ async function main() {
     console.log("Deploying contracts with the account:", deployer.address);
 
     // Define the token address
-    const tokenAddress = "0x1EA9b385738aD3ACc9813048F42C2f310FF43472"; // Replace with your actual token address
+    const tokenAddress = "0xD68325eAB47fAA4Be498917ECf1F840d39aD7414"; // Replace with your actual token address
 
     // Deploy the TMAIVesting contract
     const TMAIVesting = await ethers.getContractFactory("TMAIVesting");

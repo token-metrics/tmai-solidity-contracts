@@ -5,9 +5,9 @@ async function main() {
   // Declare variables at the top
   let Timelock, timelock, GovernorAlpha, governorAlpha;
   const adminAddress = "0x532d1069A649f2C0F6e34DB598f10082b0296f20"; // Replace with the admin address
-  const TMAIAddress = "0x1EA9b385738aD3ACc9813048F42C2f310FF43472"; // Replace with the TMAI token address
-  const baseStableCoinAddress = "0xE5a8ff8eDb3249dBCAeE9d5408Ad83AE0b0cfD7a"; // Replace with the stablecoin address
-  const signatureVerifierAddress = "0x7Fe5271a3369725712170560f5D448AF1eC1e514"; // Replace with the signature verifier address
+  const TMAIAddress = "0xD68325eAB47fAA4Be498917ECf1F840d39aD7414"; // Replace with the TMAI token address
+  const baseStableCoinAddress = "0x5ae17567F14e28723815904326eFe5a20Ba25Fa9"; // Replace with the stablecoin address
+  const signatureVerifierAddress = "0x6E4155d06c962533A53f973d025c2F30bc93B0B4"; // Replace with the signature verifier address
   const quorumPercentage = "10"; // Quorum percentage
   const yesVoteThresholdPercentage = 10; // Yes vote threshold percentage
 //   const timelockDelay = 0 * 24 * 60 * 60; // 0 days delay
